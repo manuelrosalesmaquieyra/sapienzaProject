@@ -7,14 +7,15 @@ info:
 paths:
   /session:
     post:
-      tags:
-        - login
-      summary: Registers or validates a user
-      description: "If the user doesn't exist, it creates it and returns an identifier. If it already exists, returns the identifier."
+      tags: ["login"]
+      summary: Logs in the user
+      description: |-
+        If the user does not exist, it will be created,
+        and an identifier is returned.
+        If the user exists, the user identifier is returned.
       operationId: doLogin
       requestBody:
         description: User details
-        required: true
         content:
           application/json:
             schema:
@@ -22,20 +23,23 @@ paths:
               properties:
                 name:
                   type: string
-                  example: "Manuel"
+                  example: Maria
+                  pattern: 'ˆ.*?$'
                   minLength: 3
                   maxLength: 16
               required:
                 - name
       responses:
         '201':
-          description: User authenticated succesfully.
+          description: User log-in action successful
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   identifier:
+                    # change here if you decide to use an integer
+                    # or any other type of identifier
                     type: string
                     example: "abcdef012345"
 
