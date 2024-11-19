@@ -1,0 +1,395 @@
+openapi: 3.0.3
+info:
+  title: WASAText API
+  description: API for WASAText.
+  version: "1.0.0"
+
+paths:
+  /session:
+    post:
+      tags:
+        - login
+      summary: Registers or validates a user
+      description: "If the user doesn't exist, it creates it and returns an identifier. If it already exists, returns the identifier."
+      operationId: doLogin
+      requestBody:
+        description: User details
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Manuel"
+                  minLength: 3
+                  maxLength: 16
+              required:
+                - name
+      responses:
+        '201':
+          description: User authenticated succesfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  identifier:
+                    type: string
+                    example: "abcdef012345"
+
+  /users/{username}:
+    put:
+      tags:
+        - user
+      summary: Updates UserName
+      operationId: setMyUserName
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: New UserName
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                new_name:
+                  type: string
+                  example: "NewName"
+      responses:
+        '200':
+          description: UserName updated succesfully
+
+  /users/{username}/conversations:
+    get:
+      tags:
+        - conversations
+      summary: List of a user's conversations
+      operationId: getMyConversations
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of conversations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    conversation_id:
+                      type: string
+                    last_message:
+                      type: string
+                    timestamp:
+                      type: string
+                      format: date-time
+                    participants:
+                      type: array
+                      items:
+                        type: string
+
+  /conversations/{conversation_id}:
+    get:
+      tags:
+        - conversations
+      summary: Details of an specific conversation
+      operationId: getConversation
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Details of the conversation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        message_id:
+                          type: string
+                        sender:
+                          type: string
+                        content:
+                          type: string
+                        timestamp:
+                          type: string
+                          format: date-time
+
+  /conversations/{conversation_id}/messages:
+    post:
+      tags:
+        - messages
+      summary: Send a new message to the conversation
+      operationId: sendMessage
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Message content
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  example: "Hi, how are you?"
+      responses:
+        '201':
+          description: Message sent succesfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message_id:
+                    type: string
+                    example: "msg12345"
+
+  /conversations/{conversation_id}/messages/{message_id}:
+    post:
+      tags:
+        - messages
+      summary: Forward a message
+      operationId: forwardMessage
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Message forwarded succesfully.
+
+    delete:
+      tags:
+        - messages
+      summary: Delete a sent message
+      operationId: deleteMessage
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Message deleted succesfully.
+
+  /conversations/{conversation_id}/messages/{message_id}/reactions:
+    post:
+      tags:
+        - reactions
+      summary: Comment a message
+      operationId: commentMessage
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Message's comment
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reaction:
+                  type: string
+                  example: "<3"
+      responses:
+        '201':
+          description: Comment added succesfully.
+
+    delete:
+      tags:
+        - reactions
+      summary: Delete a message's comment
+      operationId: uncommentMessage
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Comment deleted succesfully.
+
+  /conversations/groups:
+    post:
+      tags:
+        - groups
+      summary: Create a new Group Chat
+      operationId: addToGroup
+      requestBody:
+        description: Group Chat information
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  example: "Friends"
+                members:
+                  type: array
+                  items:
+                    type: string
+                    example: "user123"
+      responses:
+        '201':
+          description: Group Chat created succesfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  group_id:
+                    type: string
+                    example: "grp98765"
+
+  /conversations/groups/{group_id}:
+    post:
+      tags:
+        - groups
+      summary: Change the Group Chat name
+      operationId: setGroupName
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: New Croup Chat name
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                new_name:
+                  type: string
+                  example: "NewName"
+      responses:
+        '200':
+          description: Group Chat name updated succesfully.
+
+  /conversations/groups/{group_id}/leave:
+    post:
+      tags:
+        - groups
+      summary: Allow an user to leave a Group Chat
+      operationId: leaveGroup
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User left the Group Chat succesfully.
+
+  /conversations/groups/{group_id}/photo:
+    post:
+      tags:
+        - groups
+      summary: Update the Group Chat's photo
+      operationId: setGroupPhoto
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: New Group Chat photo
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                photo_url:
+                  type: string
+                  example: "https://example.com/groupphoto.jpg"
+      responses:
+        '200':
+          description: Group Chat photo updated.
+
+  /users/{username}/photo:
+    post:
+      tags:
+        - user
+      summary: Update User's profile picture
+      operationId: setMyPhoto
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: New profile picture
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                photo_url:
+                  type: string
+                  example: "https://example.com/photo.jpg"
+      responses:
+        '200':
+          description: User's profile picture updated.
