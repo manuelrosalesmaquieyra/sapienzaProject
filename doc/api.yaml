@@ -2,7 +2,21 @@ openapi: 3.0.3
 info:
   title: WASAText API
   description: API for WASAText.
-  version: "1.0.0"
+  version: 1.0.0
+
+tags:
+  - name: login
+    description: Operations related to user authentication
+  - name: user
+    description: User related operations
+  - name: conversations
+    description: Operations related to conversations
+  - name: messages
+    description: Messages functionalities
+  - name: reactions
+    description: Reactions to messages
+  - name: groups
+    description: Group chat operations and management
 
 paths:
   /session:
@@ -10,12 +24,12 @@ paths:
       tags: ["login"]
       summary: Logs in the user
       description: |-
-        If the user does not exist, it will be created,
-        and an identifier is returned.
-        If the user exists, the user identifier is returned.
+        Allows a user to log in by providing a username.
+        If the username does not exist, it will be created.
       operationId: doLogin
       requestBody:
-        description: User details
+        description: Details required for user login
+        required: true
         content:
           application/json:
             schema:
@@ -23,40 +37,42 @@ paths:
               properties:
                 name:
                   type: string
+                  description: The username to log in
                   example: Maria
-                  pattern: 'ˆ.*?$'
+                  pattern: '^[a-zA-Z]+$'
                   minLength: 3
                   maxLength: 16
               required:
                 - name
       responses:
         '201':
-          description: User log-in action successful
+          description: User logged in successfully 
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   identifier:
-                    # change here if you decide to use an integer
-                    # or any other type of identifier
                     type: string
+                    description: A unique identifier for the logged-in user
                     example: "abcdef012345"
 
   /users/{username}:
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: string
+          description: The username of the user
     put:
       tags:
         - user
-      summary: Updates UserName
+      summary: Updates the username
+      description: Allows the user to update their username
       operationId: setMyUserName
-      parameters:
-        - name: username
-          in: path
-          required: true
-          schema:
-            type: string
       requestBody:
-        description: New UserName
+        description: The new username to update
         required: true
         content:
           application/json:
@@ -65,23 +81,31 @@ paths:
               properties:
                 new_name:
                   type: string
+                  description: New username
                   example: "NewName"
+                  pattern: '^[a-zA-Z]+$'
+                  minLength: 3
+                  maxLength: 16
+              required:
+                - new_name
       responses:
         '200':
-          description: UserName updated succesfully
+          description: Username updated successfully
 
   /users/{username}/conversations:
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: string
+          description: The username of the user
     get:
       tags:
         - conversations
-      summary: List of a user's conversations
+      summary: List of a users conversations
+      description: Returns a list of all conversations for a user
       operationId: getMyConversations
-      parameters:
-        - name: username
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '200':
           description: List of conversations
@@ -94,28 +118,36 @@ paths:
                   properties:
                     conversation_id:
                       type: string
+                      description: Unique identifier for the conversation
                     last_message:
                       type: string
+                      description: Preview of the last message
                     timestamp:
                       type: string
                       format: date-time
+                      description: Timestamp of the last message
                     participants:
                       type: array
+                      description: List of participants in the conversation
                       items:
                         type: string
+                      minItems: 1
+                      maxItems: 50
 
   /conversations/{conversation_id}:
+    parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: The unique identifier for the conversation
     get:
       tags:
         - conversations
-      summary: Details of an specific conversation
+      summary: Details of a specific conversation
+      description: Returns all details of a specific conversation
       operationId: getConversation
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '200':
           description: Details of the conversation
@@ -126,31 +158,31 @@ paths:
                 properties:
                   messages:
                     type: array
+                    description: List of messages in the conversation
                     items:
                       type: object
                       properties:
                         message_id:
                           type: string
+                          description: Unique identifier for the message
                         sender:
                           type: string
+                          description: Username of the sender
                         content:
                           type: string
+                          description: The message content
                         timestamp:
                           type: string
                           format: date-time
+                          description: Timestamp of the message
 
   /conversations/{conversation_id}/messages:
     post:
       tags:
         - messages
       summary: Send a new message to the conversation
+      description: Allows a user to send a new message to a conversation
       operationId: sendMessage
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
       requestBody:
         description: Message content
         required: true
@@ -161,10 +193,13 @@ paths:
               properties:
                 content:
                   type: string
+                  description: The content of the message
                   example: "Hi, how are you?"
+                  minLength: 1
+                  maxLength: 500
       responses:
         '201':
-          description: Message sent succesfully.
+          description: Message sent successfully
           content:
             application/json:
               schema:
@@ -172,228 +207,37 @@ paths:
                 properties:
                   message_id:
                     type: string
+                    description: Unique identifier for the sent message
                     example: "msg12345"
 
   /conversations/{conversation_id}/messages/{message_id}:
-    post:
-      tags:
-        - messages
-      summary: Forward a message
-      operationId: forwardMessage
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '201':
-          description: Message forwarded succesfully.
-
+    parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Unique identifier for the conversation
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Unique identifier for the message
     delete:
       tags:
         - messages
       summary: Delete a sent message
+      description: Allows a user to delete a sent message
       operationId: deleteMessage
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '204':
-          description: Message deleted succesfully.
+          description: Message deleted successfully
 
-  /conversations/{conversation_id}/messages/{message_id}/reactions:
-    post:
-      tags:
-        - reactions
-      summary: Comment a message
-      operationId: commentMessage
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        description: Message's comment
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                reaction:
-                  type: string
-                  example: "<3"
-      responses:
-        '201':
-          description: Comment added succesfully.
-
-    delete:
-      tags:
-        - reactions
-      summary: Delete a message's comment
-      operationId: uncommentMessage
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: Comment deleted succesfully.
-
-  /conversations/groups:
-    post:
-      tags:
-        - groups
-      summary: Create a new Group Chat
-      operationId: addToGroup
-      requestBody:
-        description: Group Chat information
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  example: "Friends"
-                members:
-                  type: array
-                  items:
-                    type: string
-                    example: "user123"
-      responses:
-        '201':
-          description: Group Chat created succesfully.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  group_id:
-                    type: string
-                    example: "grp98765"
-
-  /conversations/groups/{group_id}:
-    post:
-      tags:
-        - groups
-      summary: Change the Group Chat name
-      operationId: setGroupName
-      parameters:
-        - name: group_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        description: New Croup Chat name
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                new_name:
-                  type: string
-                  example: "NewName"
-      responses:
-        '200':
-          description: Group Chat name updated succesfully.
-
-  /conversations/groups/{group_id}/leave:
-    post:
-      tags:
-        - groups
-      summary: Allow an user to leave a Group Chat
-      operationId: leaveGroup
-      parameters:
-        - name: group_id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '204':
-          description: User left the Group Chat succesfully.
-
-  /conversations/groups/{group_id}/photo:
-    post:
-      tags:
-        - groups
-      summary: Update the Group Chat's photo
-      operationId: setGroupPhoto
-      parameters:
-        - name: group_id
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        description: New Group Chat photo
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                photo_url:
-                  type: string
-                  example: "https://example.com/groupphoto.jpg"
-      responses:
-        '200':
-          description: Group Chat photo updated.
-
-  /users/{username}/photo:
-    post:
-      tags:
-        - user
-      summary: Update User's profile picture
-      operationId: setMyPhoto
-      parameters:
-        - name: username
-          in: path
-          required: true
-          schema:
-            type: string
-      requestBody:
-        description: New profile picture
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                photo_url:
-                  type: string
-                  example: "https://example.com/photo.jpg"
-      responses:
-        '200':
-          description: User's profile picture updated.
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+security:
+  - BearerAuth: []
