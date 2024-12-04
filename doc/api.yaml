@@ -34,6 +34,7 @@ paths:
           application/json:
             schema:
               type: object
+              description: Username to login
               properties:
                 name:
                   type: string
@@ -51,10 +52,14 @@ paths:
             application/json:
               schema:
                 type: object
+                description: Identifier of the logged-in user
                 properties:
                   identifier:
                     type: string
                     description: A unique identifier for the logged-in user
+                    pattern: '^[a-zA-Z]+$'
+                    minLength: 3
+                    maxLength: 16
                     example: "abcdef012345"
 
   /users/{username}:
@@ -65,6 +70,11 @@ paths:
         schema:
           type: string
           description: The username of the user
+          pattern: '^[a-zA-Z]+$'
+          minLength: 3
+          maxLength: 16
+          
+          
     put:
       tags:
         - user
@@ -78,6 +88,7 @@ paths:
           application/json:
             schema:
               type: object
+              description: New username
               properties:
                 new_name:
                   type: string
@@ -91,6 +102,26 @@ paths:
       responses:
         '200':
           description: Username updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Message of confirmation with the updated username
+                properties:
+                  message:
+                    type: string
+                    description: Confirmation message
+                    pattern: '^[a-zA-Z]+$'
+                    minLength: 3
+                    maxLength: 30
+                    example: "Username succesfully updated"
+                  username:
+                    type: string
+                    description: The updated username
+                    pattern: '^[a-zA-Z]+$'
+                    minLength: 3
+                    maxLength: 16
+                    example: "NewName"
 
   /users/{username}/conversations:
     parameters:
@@ -99,6 +130,9 @@ paths:
         required: true
         schema:
           type: string
+          pattern: '^[a-zA-Z]+$'
+          minLength: 3
+          maxLength: 16
           description: The username of the user
     get:
       tags:
@@ -113,6 +147,9 @@ paths:
             application/json:
               schema:
                 type: array
+                description: Conversations
+                minItems: 1
+                maxItems: 100
                 items:
                   type: object
                   properties:
@@ -142,6 +179,10 @@ paths:
         schema:
           type: string
           description: The unique identifier for the conversation
+          pattern: '^[a-zA-Z]+$'
+          minLength: 3
+          maxLength: 16
+          
     get:
       tags:
         - conversations
@@ -155,9 +196,12 @@ paths:
             application/json:
               schema:
                 type: object
+                description: Conversation details
                 properties:
                   messages:
                     type: array
+                    minItems: 1
+                    maxItems: 200
                     description: List of messages in the conversation
                     items:
                       type: object
@@ -177,6 +221,17 @@ paths:
                           description: Timestamp of the message
 
   /conversations/{conversation_id}/messages:
+    parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            description: Unique identifier for the conversation
+            pattern: '^[a-zA-Z]+$'
+            minLength: 3
+            maxLength: 16
+             
     post:
       tags:
         - messages
@@ -190,10 +245,12 @@ paths:
           application/json:
             schema:
               type: object
+              description: New message
               properties:
                 content:
                   type: string
                   description: The content of the message
+                  pattern: '^[a-zA-Z]+$'
                   example: "Hi, how are you?"
                   minLength: 1
                   maxLength: 500
@@ -204,10 +261,14 @@ paths:
             application/json:
               schema:
                 type: object
+                description: Message identifier
                 properties:
                   message_id:
                     type: string
                     description: Unique identifier for the sent message
+                    pattern: '^[a-zA-Z]+$'
+                    minLength: 3
+                    maxLength: 16
                     example: "msg12345"
 
   /conversations/{conversation_id}/messages/{message_id}:
@@ -218,12 +279,18 @@ paths:
         schema:
           type: string
           description: Unique identifier for the conversation
+          pattern: '^[a-zA-Z]+$'
+          minLength: 3
+          maxLength: 16
       - name: message_id
         in: path
         required: true
         schema:
           type: string
           description: Unique identifier for the message
+          pattern: '^[a-zA-Z]+$'
+          minLength: 3
+          maxLength: 16
     delete:
       tags:
         - messages
@@ -233,7 +300,289 @@ paths:
       responses:
         '204':
           description: Message deleted successfully
+    post:
+      tags:
+        - messages
+      summary: Forward a message
+      operationId: forwardMessage
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Message forwarded succesfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Message identifier
+                properties:
+                  message_id:
+                    type: string
+                    description: Unique identifier for the message forwarded
+                    pattern: '^[a-zA-Z]+$'
+                    minLength: 3
+                    maxLength: 16
+                    example: "msg12345"
+                    
+  /conversations/{conversation_id}/messages/{message_id}/reactions:
+    post:
+      tags:
+        - reactions
+      summary: Comment a message
+      operationId: commentMessage
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: Message comment
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Comment on the message
+              properties:
+                reaction:
+                  type: string
+                  example: "<3"
+      responses:
+        '201':
+          description: Comment added succesfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Comment
+                properties:
+                  reaction:
+                    type: string
+                    example: "<3"
 
+    delete:
+      tags:
+        - reactions
+      summary: Delete a message comment
+      operationId: uncommentMessage
+      parameters:
+        - name: conversation_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Comment deleted succesfully.
+
+  /conversations/groups:
+    post:
+      tags:
+        - groups
+      summary: Create a new Group Chat
+      operationId: addToGroup
+      requestBody:
+        description: Group Chat information
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  pattern: '^[a-zA-Z]+$'
+                  minLength: 3
+                  maxLength: 30
+                  example: "Friends"
+                members:
+                  type: array
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z]+$'
+                    minItems: 3
+                    maxItems: 30
+                    example: "user123"
+      responses:
+        '201':
+          description: Group Chat created succesfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  group_id:
+                    type: string
+                    pattern: '^[a-zA-Z]+$'
+                    minLength: 3
+                    maxLength: 30
+                    example: "grp98765"
+
+  /conversations/groups/{group_id}:
+    post:
+      tags:
+        - groups
+      summary: Change the Group Chat name
+      operationId: setGroupName
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-zA-Z]+$'
+            minLength: 3
+            maxLength: 30
+      requestBody:
+        description: New Group Chat name
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                new_name:
+                  type: string
+                  description: Group Chat name
+                  pattern: '^[a-zA-Z]+$'
+                  minLength: 3
+                  maxLength: 30
+                  example: "NewName"
+      responses:
+        '200':
+          description: Group Chat name updated succesfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  new_name:
+                    type: string
+                    pattern: '^[a-zA-Z]+$'
+                    minLength: 3
+                    maxLength: 30
+                    example: "NewName"
+
+  /conversations/groups/{group_id}/leave:
+    post:
+      tags:
+        - groups
+      summary: Allow an user to leave a Group Chat
+      operationId: leaveGroup
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User left the Group Chat succesfully.
+
+  /conversations/groups/{group_id}/photo:
+    post:
+      tags:
+        - groups
+      summary: Update the Group Chat photo
+      operationId: setGroupPhoto
+      parameters:
+        - name: group_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-zA-Z]+$'
+            minLength: 40
+            maxLength: 100
+      requestBody:
+        description: New Group Chat photo
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                photo_url:
+                  type: string
+                  description: Photo URL
+                  example: "https://example.com/groupphoto.jpg"
+      responses:
+        '200':
+          description: Group Chat photo updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  photo_url:
+                    type: string
+                    description: Group Chat photo URL
+                    example: "https://example.com/groupphoto.jpg"
+
+  /users/{username}/photo:
+    post:
+      tags:
+        - user
+      summary: Update users profile picture
+      operationId: setMyPhoto
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: '^[a-zA-Z]+$'
+            minLength: 3
+            maxLength: 16
+      requestBody:
+        description: New profile picture
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                photo_url:
+                  type: string
+                  description: Profile picture photo URL
+                  pattern: '^[a-zA-Z]+$'
+                  minLength: 40
+                  maxLength: 100
+                  example: "https://example.com/photo.jpg"
+      responses:
+        '200':
+          description: Users profile picture updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  photo_url:
+                    type: string
+                    description: Profile picture photo URL
+                    pattern: '^[a-zA-Z]+$'
+                    minLength: 40
+                    maxLength: 100
 components:
   securitySchemes:
     BearerAuth:
