@@ -17,5 +17,9 @@ func (rt *_router) Handler() http.Handler {
 	// Special routes
 	rt.router.GET("/liveness", rt.liveness)
 
+	// Rutas de conversaciones
+	rt.router.GET("/conversations/:conversationId/messages", rt.getConversationMessages)
+	rt.router.POST("/conversations/:conversationId/messages", rt.sendMessage)
+
 	return rt.router
 }

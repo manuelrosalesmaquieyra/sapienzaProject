@@ -45,6 +45,12 @@ type AppDatabase interface {
 	UpdateUsername(userID string, newUsername string) error
 	UpdateUserPhoto(userID string, photoURL string) error
 	GetUserConversations(userID string) ([]Conversation, error)
+
+	// Conversation operations
+	GetConversationMessages(conversationID string) ([]Message, error)
+	SendMessage(conversationID string, senderID string, content string) (*Message, error)
+
+	IsUserInConversation(conversationID string, userID string) (bool, error)
 }
 
 type appdbimpl struct {
@@ -57,16 +63,40 @@ func New(db *sql.DB) (AppDatabase, error) {
 		return nil, errors.New("database is required when building a AppDatabase")
 	}
 
-	// Crear tabla de usuarios si no existe
-	sqlStmt := `CREATE TABLE IF NOT EXISTS users (
+	// Crear tablas si no existen
+	sqlStmt := `
+	CREATE TABLE IF NOT EXISTS users (
 		id TEXT PRIMARY KEY,
 		username TEXT UNIQUE NOT NULL,
 		token TEXT UNIQUE NOT NULL,
 		photo_url TEXT
+	);
+
+	CREATE TABLE IF NOT EXISTS conversations (
+		id TEXT PRIMARY KEY,
+		last_message TEXT,
+		timestamp DATETIME
+	);
+
+	CREATE TABLE IF NOT EXISTS messages (
+		id TEXT PRIMARY KEY,
+		conversation_id TEXT,
+		sender TEXT,
+		content TEXT,
+		timestamp DATETIME,
+		FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+	);
+
+	CREATE TABLE IF NOT EXISTS conversation_participants (
+		conversation_id TEXT,
+		user_id TEXT,
+		PRIMARY KEY (conversation_id, user_id),
+		FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+		FOREIGN KEY (user_id) REFERENCES users(id)
 	);`
 
 	if _, err := db.Exec(sqlStmt); err != nil {
-		return nil, fmt.Errorf("error creating users table: %w", err)
+		return nil, fmt.Errorf("error creating tables: %w", err)
 	}
 
 	return &appdbimpl{
