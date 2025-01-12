@@ -1,66 +1,92 @@
 openapi: 3.0.3
 info:
   title: WASAText API
-  description: API for WASAText.
+  description: |-
+    API for WASAText.
   version: 1.0.0
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Invalid request"
+  
+  responses:
+    BadRequest:
+      description: Invalid input parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Invalid or missing authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+            
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
 
 tags:
   - name: login
-    description: Operations related to user authentication
+    description: Authentication operations
   - name: user
-    description: User related operations
+    description: User management operations
   - name: conversations
-    description: Operations related to conversations
+    description: Conversation management
   - name: messages
-    description: Messages functionalities
+    description: Message operations
   - name: reactions
-    description: Reactions to messages
+    description: Message reactions
   - name: groups
-    description: Group chat operations and management
+    description: Group chat operations
 
 paths:
   /session:
     post:
       tags: ["login"]
-      summary: Logs in the user
-      description: |-
-        Allows a user to log in by providing a username.
-        If the username does not exist, it will be created.
+      summary: User login
+      description: Creates a new session. Does not require authentication.
+      security: []
       operationId: doLogin
       requestBody:
-        description: Details required for user login
         required: true
         content:
           application/json:
             schema:
               type: object
-              description: Username to login
               properties:
                 name:
                   type: string
-                  description: The username to log in
-                  example: Maria
-                  pattern: '^[a-zA-Z]+$'
+                  pattern: '^[a-zA-Z0-9_-]+$'
                   minLength: 3
                   maxLength: 16
+                  example: "John_Cena"
               required:
                 - name
       responses:
         '201':
-          description: User logged in successfully 
+          description: Login successful
           content:
             application/json:
               schema:
                 type: object
-                description: Identifier of the logged-in user
                 properties:
                   identifier:
                     type: string
-                    description: A unique identifier for the logged-in user
-                    pattern: '^[a-zA-Z]+$'
-                    minLength: 3
-                    maxLength: 16
-                    example: "abcdef012345"
+                    format: uuid
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                required:
+                  - identifier
+        '400':
+          $ref: '#/components/responses/BadRequest'
 
   /users/{username}:
     parameters:
@@ -69,34 +95,28 @@ paths:
         required: true
         schema:
           type: string
-          description: The username of the user
-          pattern: '^[a-zA-Z]+$'
+          pattern: '^[a-zA-Z0-9_-]+$'
           minLength: 3
           maxLength: 16
-          
-          
+          example: "John_Cena"
     put:
-      tags:
-        - user
-      summary: Updates the username
-      description: Allows the user to update their username
+      tags: ["user"]
+      summary: Update username
+      description: Updates the authenticated user's username
       operationId: setMyUserName
       requestBody:
-        description: The new username to update
         required: true
         content:
           application/json:
             schema:
               type: object
-              description: New username
               properties:
                 new_name:
                   type: string
-                  description: New username
-                  example: "NewName"
-                  pattern: '^[a-zA-Z]+$'
+                  pattern: '^[a-zA-Z0-9_-]+$'
                   minLength: 3
                   maxLength: 16
+                  example: "John_Lennon"
               required:
                 - new_name
       responses:
@@ -106,22 +126,20 @@ paths:
             application/json:
               schema:
                 type: object
-                description: Message of confirmation with the updated username
                 properties:
                   message:
                     type: string
-                    description: Confirmation message
-                    pattern: '^[a-zA-Z]+$'
-                    minLength: 3
-                    maxLength: 30
-                    example: "Username succesfully updated"
+                    example: "Username successfully updated"
                   username:
                     type: string
-                    description: The updated username
-                    pattern: '^[a-zA-Z]+$'
-                    minLength: 3
-                    maxLength: 16
-                    example: "NewName"
+                    example: "John_Lennon_2"
+                required:
+                  - message
+                  - username
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /users/{username}/conversations:
     parameters:
@@ -130,15 +148,13 @@ paths:
         required: true
         schema:
           type: string
-          pattern: '^[a-zA-Z]+$'
+          pattern: '^[a-zA-Z0-9_-]+$'
           minLength: 3
           maxLength: 16
-          description: The username of the user
     get:
-      tags:
-        - conversations
-      summary: List of a users conversations
-      description: Returns a list of all conversations for a user
+      tags: ["conversations"]
+      summary: List user conversations
+      description: Returns all conversations for the authenticated user
       operationId: getMyConversations
       responses:
         '200':
@@ -147,29 +163,33 @@ paths:
             application/json:
               schema:
                 type: array
-                description: Conversations
-                minItems: 1
-                maxItems: 100
                 items:
                   type: object
                   properties:
                     conversation_id:
                       type: string
-                      description: Unique identifier for the conversation
+                      format: uuid
+                      example: "123e4567-e89b-12d3-a456-426614174000"
                     last_message:
                       type: string
-                      description: Preview of the last message
+                      example: "Hey, how are you?"
                     timestamp:
                       type: string
                       format: date-time
-                      description: Timestamp of the last message
+                      example: "2024-03-15T14:30:00Z"
                     participants:
                       type: array
-                      description: List of participants in the conversation
                       items:
                         type: string
-                      minItems: 1
+                        pattern: '^[a-zA-Z0-9_-]+$'
+                      example: ["John_Lennon", "Paul_McCartney"]
+                      minItems: 2
                       maxItems: 50
+                  required:
+                    - conversation_id
+                    - participants
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /conversations/{conversation_id}:
     parameters:
@@ -178,82 +198,75 @@ paths:
         required: true
         schema:
           type: string
-          description: The unique identifier for the conversation
-          pattern: '^[a-zA-Z]+$'
-          minLength: 3
-          maxLength: 16
-          
+          format: uuid
     get:
-      tags:
-        - conversations
-      summary: Details of a specific conversation
-      description: Returns all details of a specific conversation
+      tags: ["conversations"]
+      summary: Get conversation details
+      description: Returns details of a specific conversation
       operationId: getConversation
       responses:
         '200':
-          description: Details of the conversation
+          description: Conversation details
           content:
             application/json:
               schema:
                 type: object
-                description: Conversation details
                 properties:
                   messages:
                     type: array
-                    minItems: 1
-                    maxItems: 200
-                    description: List of messages in the conversation
                     items:
                       type: object
                       properties:
                         message_id:
                           type: string
-                          description: Unique identifier for the message
+                          format: uuid
                         sender:
                           type: string
-                          description: Username of the sender
+                          pattern: '^[a-zA-Z0-9_-]+$'
                         content:
                           type: string
-                          description: The message content
                         timestamp:
                           type: string
                           format: date-time
-                          description: Timestamp of the message
+                      required:
+                        - message_id
+                        - sender
+                        - content
+                        - timestamp
+                    minItems: 0
+                    maxItems: 200
+                required:
+                  - messages
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /conversations/{conversation_id}/messages:
     parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-            description: Unique identifier for the conversation
-            pattern: '^[a-zA-Z]+$'
-            minLength: 3
-            maxLength: 16
-             
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     post:
-      tags:
-        - messages
-      summary: Send a new message to the conversation
-      description: Allows a user to send a new message to a conversation
+      tags: ["messages"]
+      summary: Send message
+      description: Sends a new message to the conversation
       operationId: sendMessage
       requestBody:
-        description: Message content
         required: true
         content:
           application/json:
             schema:
               type: object
-              description: New message
               properties:
                 content:
                   type: string
-                  description: The content of the message
-                  pattern: '^[a-zA-Z]+$'
-                  example: "Hi, how are you?"
                   minLength: 1
                   maxLength: 500
+                  example: "Hello, how are you?"
+              required:
+                - content
       responses:
         '201':
           description: Message sent successfully
@@ -261,15 +274,17 @@ paths:
             application/json:
               schema:
                 type: object
-                description: Message identifier
                 properties:
                   message_id:
                     type: string
-                    description: Unique identifier for the sent message
-                    pattern: '^[a-zA-Z]+$'
-                    minLength: 3
-                    maxLength: 16
-                    example: "msg12345"
+                    format: uuid
+                    example: "123e4567-e89b-12d3-a456-426614174000"
+                required:
+                  - message_id
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /conversations/{conversation_id}/messages/{message_id}:
     parameters:
@@ -278,131 +293,113 @@ paths:
         required: true
         schema:
           type: string
-          description: Unique identifier for the conversation
-          pattern: '^[a-zA-Z]+$'
-          minLength: 3
-          maxLength: 16
+          format: uuid
       - name: message_id
         in: path
         required: true
         schema:
           type: string
-          description: Unique identifier for the message
-          pattern: '^[a-zA-Z]+$'
-          minLength: 3
-          maxLength: 16
+          format: uuid
     delete:
-      tags:
-        - messages
-      summary: Delete a sent message
-      description: Allows a user to delete a sent message
+      tags: ["messages"]
+      summary: Delete message
+      description: Deletes a message from the conversation
       operationId: deleteMessage
       responses:
         '204':
           description: Message deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     post:
-      tags:
-        - messages
-      summary: Forward a message
+      tags: ["messages"]
+      summary: Forward message
+      description: Forwards a message to another conversation
       operationId: forwardMessage
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '201':
-          description: Message forwarded succesfully.
+          description: Message forwarded successfully
           content:
             application/json:
               schema:
                 type: object
-                description: Message identifier
                 properties:
                   message_id:
                     type: string
-                    description: Unique identifier for the message forwarded
-                    pattern: '^[a-zA-Z]+$'
-                    minLength: 3
-                    maxLength: 16
-                    example: "msg12345"
-                    
+                    format: uuid
+                    example: "123e4567-e89b-12d3-a456-426614174000"
+                required:
+                  - message_id
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /conversations/{conversation_id}/messages/{message_id}/reactions:
+    parameters:
+      - name: conversation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: message_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     post:
-      tags:
-        - reactions
-      summary: Comment a message
+      tags: ["reactions"]
+      summary: Add reaction
+      description: Adds a reaction to a message
       operationId: commentMessage
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
       requestBody:
-        description: Message comment
         required: true
         content:
           application/json:
             schema:
               type: object
-              description: Comment on the message
               properties:
                 reaction:
                   type: string
+                  minLength: 1
+                  maxLength: 5
                   example: "<3"
+              required:
+                - reaction
       responses:
         '201':
-          description: Comment added succesfully.
+          description: Reaction added successfully
           content:
             application/json:
               schema:
                 type: object
-                description: Comment
                 properties:
                   reaction:
                     type: string
                     example: "<3"
-
+                required:
+                  - reaction
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
     delete:
-      tags:
-        - reactions
-      summary: Delete a message comment
+      tags: ["reactions"]
+      summary: Remove reaction
+      description: Removes a reaction from a message
       operationId: uncommentMessage
-      parameters:
-        - name: conversation_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: message_id
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '204':
-          description: Comment deleted succesfully.
+          description: Reaction removed successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /conversations/groups:
     post:
-      tags:
-        - groups
-      summary: Create a new Group Chat
+      tags: ["groups"]
+      summary: Create group chat
+      description: Creates a new group conversation
       operationId: addToGroup
       requestBody:
-        description: Group Chat information
         required: true
         content:
           application/json:
@@ -411,21 +408,24 @@ paths:
               properties:
                 name:
                   type: string
-                  pattern: '^[a-zA-Z]+$'
+                  pattern: '^[a-zA-Z0-9_-]+$'
                   minLength: 3
                   maxLength: 30
-                  example: "Friends"
+                  example: "Family_Group"
                 members:
                   type: array
                   items:
                     type: string
-                    pattern: '^[a-zA-Z]+$'
-                    minItems: 3
-                    maxItems: 30
-                    example: "user123"
+                    pattern: '^[a-zA-Z0-9_-]+$'
+                  minItems: 2
+                  maxItems: 50
+                  example: ["John_Lennon", "George_Harrison"]
+              required:
+                - name
+                - members
       responses:
         '201':
-          description: Group Chat created succesfully.
+          description: Group created successfully
           content:
             application/json:
               schema:
@@ -433,28 +433,29 @@ paths:
                 properties:
                   group_id:
                     type: string
-                    pattern: '^[a-zA-Z]+$'
-                    minLength: 3
-                    maxLength: 30
-                    example: "grp98765"
+                    format: uuid
+                    example: "123e4567-e89b-12d3-a456-426614174000"
+                required:
+                  - group_id
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /conversations/groups/{group_id}:
+    parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     post:
-      tags:
-        - groups
-      summary: Change the Group Chat name
+      tags: ["groups"]
+      summary: Update group name
+      description: Updates the name of a group chat
       operationId: setGroupName
-      parameters:
-        - name: group_id
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[a-zA-Z]+$'
-            minLength: 3
-            maxLength: 30
       requestBody:
-        description: New Group Chat name
         required: true
         content:
           application/json:
@@ -463,14 +464,15 @@ paths:
               properties:
                 new_name:
                   type: string
-                  description: Group Chat name
-                  pattern: '^[a-zA-Z]+$'
+                  pattern: '^[a-zA-Z0-9_-]+$'
                   minLength: 3
                   maxLength: 30
-                  example: "NewName"
+                  example: "Family_Chat"
+              required:
+                - new_name
       responses:
         '200':
-          description: Group Chat name updated succesfully.
+          description: Group name updated successfully
           content:
             application/json:
               schema:
@@ -478,44 +480,47 @@ paths:
                 properties:
                   new_name:
                     type: string
-                    pattern: '^[a-zA-Z]+$'
-                    minLength: 3
-                    maxLength: 30
-                    example: "NewName"
+                    example: "Updated_Family_Chat"
+                required:
+                  - new_name
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /conversations/groups/{group_id}/leave:
+    parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     post:
-      tags:
-        - groups
-      summary: Allow an user to leave a Group Chat
+      tags: ["groups"]
+      summary: Leave group
+      description: Removes the authenticated user from a group chat
       operationId: leaveGroup
-      parameters:
-        - name: group_id
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '204':
-          description: User left the Group Chat succesfully.
+          description: Successfully left the group
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /conversations/groups/{group_id}/photo:
+    parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
     post:
-      tags:
-        - groups
-      summary: Update the Group Chat photo
+      tags: ["groups"]
+      summary: Update group photo
+      description: Updates the group chat photo
       operationId: setGroupPhoto
-      parameters:
-        - name: group_id
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[a-zA-Z]+$'
-            minLength: 40
-            maxLength: 100
       requestBody:
-        description: New Group Chat photo
         required: true
         content:
           application/json:
@@ -524,11 +529,13 @@ paths:
               properties:
                 photo_url:
                   type: string
-                  description: Photo URL
-                  example: "https://example.com/groupphoto.jpg"
+                  format: uri
+                  example: "https://example.com/photos/group.jpg"
+              required:
+                - photo_url
       responses:
         '200':
-          description: Group Chat photo updated.
+          description: Group photo updated successfully
           content:
             application/json:
               schema:
@@ -536,26 +543,31 @@ paths:
                 properties:
                   photo_url:
                     type: string
-                    description: Group Chat photo URL
-                    example: "https://example.com/groupphoto.jpg"
+                    format: uri
+                    example: "https://example.com/photos/group.jpg"
+                required:
+                  - photo_url
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /users/{username}/photo:
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: '^[a-zA-Z0-9_-]+$'
+          minLength: 3
+          maxLength: 16
     post:
-      tags:
-        - user
-      summary: Update users profile picture
+      tags: ["user"]
+      summary: Update profile photo
+      description: Updates the user's profile photo
       operationId: setMyPhoto
-      parameters:
-        - name: username
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: '^[a-zA-Z]+$'
-            minLength: 3
-            maxLength: 16
       requestBody:
-        description: New profile picture
         required: true
         content:
           application/json:
@@ -564,14 +576,13 @@ paths:
               properties:
                 photo_url:
                   type: string
-                  description: Profile picture photo URL
-                  pattern: '^[a-zA-Z]+$'
-                  minLength: 40
-                  maxLength: 100
-                  example: "https://example.com/photo.jpg"
+                  format: uri
+                  example: "https://example.com/photos/profile.jpg"
+              required:
+                - photo_url
       responses:
         '200':
-          description: Users profile picture updated.
+          description: Profile photo updated successfully
           content:
             application/json:
               schema:
@@ -579,14 +590,14 @@ paths:
                 properties:
                   photo_url:
                     type: string
-                    description: Profile picture photo URL
-                    pattern: '^[a-zA-Z]+$'
-                    minLength: 40
-                    maxLength: 100
-components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
+                    format: uri
+                    example: "https://example.com/photos/profile.jpg"
+                required:
+                  - photo_url
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
 security:
   - BearerAuth: []
