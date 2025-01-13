@@ -2,7 +2,7 @@ package database
 
 import "time"
 
-// User represents the structure of a user in the database
+// User representa la estructura de un usuario en la base de datos
 type User struct {
 	ID       string
 	Username string
@@ -10,7 +10,6 @@ type User struct {
 	PhotoURL string
 }
 
-// Conversation represents a conversation between two or more users
 type Conversation struct {
 	ID           string    `json:"conversation_id"`
 	LastMessage  string    `json:"last_message"`
@@ -18,18 +17,31 @@ type Conversation struct {
 	Participants []string  `json:"participants"`
 }
 
-// Message represents a message in a conversation
-type Message struct {
-	ID             string    `json:"message_id"`
-	ConversationID string    `json:"conversation_id"`
-	Sender         string    `json:"sender"`
-	Content        string    `json:"content"`
-	Time           time.Time `json:"timestamp"`
+// Reaction representa una reacción a un mensaje
+type Reaction struct {
+	UserID   string `json:"user_id" bson:"userID"`
+	Reaction string `json:"reaction" bson:"reaction"`
 }
 
-// Reaction represents a reaction to a message
-type Reaction struct {
-	MessageID string `json:"message_id"`
-	UserID    string `json:"user_id"`
-	Reaction  string `json:"reaction"`
+type Message struct {
+	ID             string     `json:"message_id"`
+	ConversationID string     `json:"conversation_id"`
+	Sender         string     `json:"sender"`
+	Content        string     `json:"content"`
+	Time           time.Time  `json:"timestamp"`
+	Reactions      []Reaction `json:"reactions,omitempty" bson:"reactions,omitempty"`
+}
+
+// Group representa un grupo de chat
+type Group struct {
+	ID        string    `json:"group_id"`
+	Name      string    `json:"name"`
+	PhotoURL  string    `json:"photo_url,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// GroupMember representa un miembro de un grupo
+type GroupMember struct {
+	GroupID string `json:"group_id"`
+	UserID  string `json:"user_id"`
 }

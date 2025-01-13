@@ -14,10 +14,9 @@ func (rt *_router) Handler() http.Handler {
 	rt.router.GET("/conversations/:conversationId/messages", rt.getConversationMessages)
 	rt.router.POST("/conversations/:conversationId/messages", rt.sendMessage)
 
-	// Message routes
-	//rt.router.GET("/messages/:messageId", rt.getMessage)
-	rt.router.DELETE("/conversations/:conversationId/messages/:messageId", rt.deleteMessage)
-	rt.router.POST("/conversations/:conversationId/messages/:messageId", rt.forwardMessage)
+	// Reaction routes
+	rt.router.POST("/conversations/:conversationId/messages/:messageId/reactions", rt.addReaction)
+	rt.router.DELETE("/conversations/:conversationId/messages/:messageId/reactions", rt.removeReaction)
 
 	// Register routes
 	rt.router.GET("/", rt.getHelloWorld)
@@ -25,10 +24,6 @@ func (rt *_router) Handler() http.Handler {
 
 	// Special routes
 	rt.router.GET("/liveness", rt.liveness)
-
-	// Rutas de reacciones
-	rt.router.POST("/conversations/:conversationId/messages/:messageId/reactions", rt.addReaction)
-	rt.router.DELETE("/conversations/:conversationId/messages/:messageId/reactions", rt.removeReaction)
 
 	return rt.router
 }
