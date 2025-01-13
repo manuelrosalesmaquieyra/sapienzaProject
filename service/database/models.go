@@ -11,7 +11,16 @@ type User struct {
 }
 
 type Conversation struct {
-	ID          string
-	LastMessage string
-	Timestamp   time.Time
+	ID           string    `json:"conversation_id"`
+	LastMessage  string    `json:"last_message"`
+	Timestamp    time.Time `json:"timestamp"`
+	Participants []string  `json:"participants"`
+}
+
+type Message struct {
+	ID             string    `json:"message_id"`
+	ConversationID string    `json:"conversation_id"`
+	Sender         string    `json:"sender"`
+	Content        string    `json:"content"`
+	Time           time.Time `json:"timestamp"`
 }

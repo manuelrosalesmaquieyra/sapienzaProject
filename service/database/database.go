@@ -49,8 +49,12 @@ type AppDatabase interface {
 	// Conversation operations
 	GetConversationMessages(conversationID string) ([]Message, error)
 	SendMessage(conversationID string, senderID string, content string) (*Message, error)
-
 	IsUserInConversation(conversationID string, userID string) (bool, error)
+
+	// Message operations
+	GetMessageByID(messageID string) (*Message, error)
+	DeleteMessage(messageID string) error
+	ForwardMessage(messageID, newConversationID, senderID string) (*Message, error)
 }
 
 type appdbimpl struct {

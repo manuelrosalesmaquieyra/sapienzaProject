@@ -15,9 +15,16 @@ func (rt *_router) getConversationMessages(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Verificar autenticación
+	// Verificar autenticación y obtener usuario
 	user, err := rt.getUserFromToken(r)
 	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Verificar que el usuario es participante de la conversación
+	isParticipant, err := rt.db.IsUserInConversation(conversationID, user.ID)
+	if err != nil || !isParticipant {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
