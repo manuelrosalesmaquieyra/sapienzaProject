@@ -10,8 +10,9 @@ import (
 // deleteMessage maneja DELETE /messages/{messageId}
 func (rt *_router) deleteMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	messageID := ps.ByName("messageId")
-	if messageID == "" {
-		http.Error(w, "Message ID is required", http.StatusBadRequest)
+	conversationID := ps.ByName("conversationId")
+	if messageID == "" || conversationID == "" {
+		http.Error(w, "Message ID and Conversation ID are required", http.StatusBadRequest)
 		return
 	}
 
@@ -39,11 +40,12 @@ func (rt *_router) deleteMessage(w http.ResponseWriter, r *http.Request, ps http
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// forwardMessage maneja POST /messages/{messageId}/forward
+// forwardMessage maneja POST conversations/{conversationId}/messages/{messageId}
 func (rt *_router) forwardMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	messageID := ps.ByName("messageId")
-	if messageID == "" {
-		http.Error(w, "Message ID is required", http.StatusBadRequest)
+	conversationID := ps.ByName("conversationId")
+	if messageID == "" || conversationID == "" {
+		http.Error(w, "Message ID and Conversation ID are required", http.StatusBadRequest)
 		return
 	}
 
@@ -54,17 +56,8 @@ func (rt *_router) forwardMessage(w http.ResponseWriter, r *http.Request, ps htt
 		return
 	}
 
-	// Parsear body para obtener la nueva conversación
-	var requestBody struct {
-		NewConversationID string `json:"new_conversation_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
 	// Reenviar mensaje
-	newMessage, err := rt.db.ForwardMessage(messageID, requestBody.NewConversationID, user.ID)
+	newMessage, err := rt.db.ForwardMessage(messageID, conversationID, user.ID)
 	if err != nil {
 		http.Error(w, "Failed to forward message", http.StatusInternalServerError)
 		return
