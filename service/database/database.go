@@ -59,6 +59,12 @@ type AppDatabase interface {
 	// Reaction operations
 	AddReaction(messageID string, userID string, reaction string) error
 	RemoveReaction(messageID string, userID string) error
+
+	// Group operations
+	CreateGroup(name string, creatorID string) (*Group, error)
+	UpdateGroupName(groupID string, newName string) error
+	UpdateGroupPhoto(groupID string, photoURL string) error
+	LeaveGroup(groupID string, userID string) error
 }
 
 type appdbimpl struct {
