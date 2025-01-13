@@ -55,6 +55,10 @@ type AppDatabase interface {
 	GetMessageByID(messageID string) (*Message, error)
 	DeleteMessage(messageID string) error
 	ForwardMessage(messageID, newConversationID, senderID string) (*Message, error)
+
+	// Reaction operations
+	AddReaction(messageID string, userID string, reaction string) error
+	RemoveReaction(messageID string, userID string) error
 }
 
 type appdbimpl struct {
@@ -97,10 +101,20 @@ func New(db *sql.DB) (AppDatabase, error) {
 		PRIMARY KEY (conversation_id, user_id),
 		FOREIGN KEY (conversation_id) REFERENCES conversations(id),
 		FOREIGN KEY (user_id) REFERENCES users(id)
+	);
+
+	CREATE TABLE IF NOT EXISTS reactions (
+		message_id TEXT,
+		user_id TEXT,
+		reaction TEXT,
+		PRIMARY KEY (message_id, user_id),
+		FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
+		FOREIGN KEY (user_id) REFERENCES users(id),
+		CHECK (length(reaction) >= 1 AND length(reaction) <= 5)
 	);`
 
 	if _, err := db.Exec(sqlStmt); err != nil {
-		return nil, fmt.Errorf("error creating tables: %w", err)
+		return nil, fmt.Errorf("error creating database schema: %w", err)
 	}
 
 	return &appdbimpl{
