@@ -3,6 +3,7 @@ package database
 import (
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 
 	"github.com/google/uuid"
@@ -32,7 +33,13 @@ func (db *appdbimpl) CreateSession(name string) (*Session, error) {
 	// Si el usuario no existe, crearlo
 	if !exists {
 		userID := uuid.New().String()
-		_, err = db.c.Exec("INSERT INTO users (id, username) VALUES (?, ?)", userID, name)
+		userToken := uuid.New().String() // Asegurarnos que esto se ejecuta
+
+		// Imprimir para debug
+		log.Printf("Creating user: ID=%s, Name=%s, Token=%s", userID, name, userToken)
+
+		_, err = db.c.Exec("INSERT INTO users (id, username, token) VALUES (?, ?, ?)",
+			userID, name, userToken)
 		if err != nil {
 			return nil, fmt.Errorf("error creating user: %w", err)
 		}

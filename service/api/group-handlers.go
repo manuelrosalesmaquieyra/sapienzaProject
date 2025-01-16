@@ -7,7 +7,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-// createGroup maneja POST /conversations/groups/
+// createGroup maneja POST /groups/
 func (rt *_router) createGroup(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	// Verificar autenticación
 	user, err := rt.getUserFromToken(r)
@@ -40,7 +40,7 @@ func (rt *_router) createGroup(w http.ResponseWriter, r *http.Request, _ httprou
 	}
 }
 
-// updateGroupName maneja POST /conversations/groups/{group_id}
+// updateGroupName maneja POST /groups/{group_id}
 func (rt *_router) updateGroupName(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	groupID := ps.ByName("group_id")
 	if groupID == "" {
@@ -74,7 +74,7 @@ func (rt *_router) updateGroupName(w http.ResponseWriter, r *http.Request, ps ht
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// updateGroupPhoto maneja POST /conversations/groups/{group_id}/photo
+// updateGroupPhoto maneja POST /groups/{group_id}/photo
 func (rt *_router) updateGroupPhoto(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	groupID := ps.ByName("group_id")
 	if groupID == "" {
@@ -108,7 +108,7 @@ func (rt *_router) updateGroupPhoto(w http.ResponseWriter, r *http.Request, ps h
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// leaveGroup maneja POST /conversations/groups/{group_id}/leave
+// leaveGroup maneja POST /groups/{group_id}/leave
 func (rt *_router) leaveGroup(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	groupID := ps.ByName("group_id")
 	if groupID == "" {

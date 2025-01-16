@@ -1,4 +1,3 @@
-
 openapi: 3.0.3
 info:
   title: WASAText API
@@ -394,7 +393,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /conversations/groups:
+  /groups:
     post:
       tags: ["groups"]
       summary: Create group chat
@@ -443,7 +442,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /conversations/groups/{group_id}:
+  /groups/{group_id}:
     parameters:
       - name: group_id
         in: path
@@ -489,7 +488,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /conversations/groups/{group_id}/leave:
+  /groups/{group_id}/leave:
     parameters:
       - name: group_id
         in: path
@@ -508,7 +507,7 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
-  /conversations/groups/{group_id}/photo:
+  /groups/{group_id}/photo:
     parameters:
       - name: group_id
         in: path
