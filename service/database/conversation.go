@@ -3,8 +3,8 @@ package database
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
-
 	"github.com/google/uuid"
 )
 
@@ -95,12 +95,15 @@ func (db *appdbimpl) SendMessage(conversationID string, senderID string, content
 		return nil, errors.New("sender is not part of the conversation")
 	}
 
-	// Iniciar transacción
-	tx, err := db.c.Begin()
+		tx, err := db.c.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error starting transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			log.Printf("error rolling back transaction: %v", err)
+		}
+	}() // Operación en bases de datos que "deshace" una transacción cuando algo sale mal.
 
 	// Crear mensaje
 	msg := Message{

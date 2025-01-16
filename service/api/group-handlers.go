@@ -34,7 +34,10 @@ func (rt *_router) createGroup(w http.ResponseWriter, r *http.Request, _ httprou
 
 	// Devolver respuesta
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(group)
+	if err := json.NewEncoder(w).Encode(group); err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // updateGroupName maneja POST /conversations/groups/{group_id}

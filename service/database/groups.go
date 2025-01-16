@@ -3,6 +3,7 @@ package database
 import (
 	"errors"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -37,11 +38,14 @@ func (db *appdbimpl) CreateGroup(name string, creatorID string) (*Group, error) 
 	if err != nil {
 		return nil, fmt.Errorf("error starting transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			log.Printf("error rolling back transaction: %v", err)
+		}
+	}()
 
 	// Insertar grupo
-	_, err = tx.Exec(`
-        INSERT INTO groups (id, name, created_at)
+	_, err = tx.Exec(`        INSERT INTO groups (id, name, created_at)
         VALUES (?, ?, ?)
     `, group.ID, group.Name, group.CreatedAt)
 	if err != nil {
@@ -49,8 +53,7 @@ func (db *appdbimpl) CreateGroup(name string, creatorID string) (*Group, error) 
 	}
 
 	// Añadir creador como miembro
-	_, err = tx.Exec(`
-        INSERT INTO group_members (group_id, user_id)
+	_, err = tx.Exec(`        INSERT INTO group_members (group_id, user_id)
         VALUES (?, ?)
     `, group.ID, creatorID)
 	if err != nil {

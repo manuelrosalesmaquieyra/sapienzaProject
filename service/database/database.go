@@ -65,6 +65,8 @@ type AppDatabase interface {
 	UpdateGroupName(groupID string, newName string) error
 	UpdateGroupPhoto(groupID string, photoURL string) error
 	LeaveGroup(groupID string, userID string) error
+
+	CreateSession(name string) (*Session, error)
 }
 
 type appdbimpl struct {
@@ -117,6 +119,12 @@ func New(db *sql.DB) (AppDatabase, error) {
 		FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE,
 		FOREIGN KEY (user_id) REFERENCES users(id),
 		CHECK (length(reaction) >= 1 AND length(reaction) <= 5)
+	);
+
+	CREATE TABLE IF NOT EXISTS sessions (
+		identifier TEXT PRIMARY KEY,
+		username TEXT NOT NULL,
+		FOREIGN KEY (username) REFERENCES users(username)
 	);`
 
 	if _, err := db.Exec(sqlStmt); err != nil {

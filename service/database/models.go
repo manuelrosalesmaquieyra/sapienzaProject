@@ -45,3 +45,7 @@ type GroupMember struct {
 	GroupID string `json:"group_id"`
 	UserID  string `json:"user_id"`
 }
+
+type Session struct {
+	Identifier string `json:"identifier"`
+}
