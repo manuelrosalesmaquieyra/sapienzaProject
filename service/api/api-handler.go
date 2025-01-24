@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+
+	"github.com/gorilla/handlers"
 )
 
 // Handler returns an instance of httprouter.Router that handle APIs registered here
@@ -11,8 +13,8 @@ func (rt *_router) Handler() http.Handler {
 	rt.router.POST("/session", rt.doLogin)
 
 	// User routes
-	rt.router.PUT("/users/{username}", rt.setMyUserName)
-	rt.router.POST("/users/{username}/photo", rt.setMyPhoto)
+	rt.router.PUT("/users/:username", rt.setMyUserName)
+	rt.router.POST("/users/:username/photo", rt.setMyPhoto)
 
 	// Group routes
 	rt.router.POST("/groups", rt.createGroup)
@@ -22,7 +24,8 @@ func (rt *_router) Handler() http.Handler {
 
 	// Conversation routes
 	rt.router.GET("/conversations/:conversationId/messages", rt.getConversationMessages)
-	rt.router.GET("/users/{username}/conversations", rt.getUserConversations)
+	rt.router.GET("/users/:username/conversations", rt.getUserConversations)
+	rt.router.POST("/conversations", rt.createConversation)
 
 	// Reaction routes
 	rt.router.POST("/conversations/:conversationId/messages/:messageId/reactions", rt.addReaction)
@@ -40,5 +43,14 @@ func (rt *_router) Handler() http.Handler {
 	// Special routes
 	//rt.router.GET("/liveness", rt.liveness)
 
-	return rt.router
+	// Create CORS handler
+	corsMiddleware := handlers.CORS(
+		handlers.AllowedOrigins([]string{"http://localhost:5173"}),
+		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
+		handlers.AllowCredentials(),
+	)
+
+	// Apply CORS middleware to router
+	return corsMiddleware(rt.router)
 }

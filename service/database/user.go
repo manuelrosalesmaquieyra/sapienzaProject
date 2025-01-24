@@ -4,23 +4,36 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 )
 
 // GetUserByToken busca un usuario por su token de autenticación
 func (db *appdbimpl) GetUserByToken(token string) (*User, error) {
+	log.Printf("Searching for user with token: %s", token)
+
 	var user User
+	var photoURL sql.NullString // Use sql.NullString for nullable column
+
 	err := db.c.QueryRow(
 		"SELECT id, username, token, photo_url FROM users WHERE token = ?",
 		token,
-	).Scan(&user.ID, &user.Username, &user.Token, &user.PhotoURL)
+	).Scan(&user.ID, &user.Username, &user.Token, &photoURL)
 
 	if err == sql.ErrNoRows {
+		log.Printf("No user found with token: %s", token)
 		return nil, errors.New("user not found")
 	}
 	if err != nil {
+		log.Printf("Error querying user: %v", err)
 		return nil, fmt.Errorf("error getting user: %w", err)
 	}
 
+	// Convert NullString to string
+	if photoURL.Valid {
+		user.PhotoURL = photoURL.String
+	}
+
+	log.Printf("Found user: %s", user.Username)
 	return &user, nil
 }
 
@@ -64,50 +77,6 @@ func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
 
 // UpdateUserPhoto actualiza la foto de perfil del usuario
 func (db *appdbimpl) UpdateUserPhoto(userID string, photoURL string) error {
-	result, err := db.c.Exec(
-		"UPDATE users SET photo_url = ? WHERE id = ?",
-		photoURL, userID,
-	)
-	if err != nil {
-		return fmt.Errorf("error updating photo: %w", err)
-	}
-
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("error checking update result: %w", err)
-	}
-
-	if rows == 0 {
-		return errors.New("user not found")
-	}
-
-	return nil
-}
-
-// GetUserConversations obtiene todas las conversaciones de un usuario
-func (db *appdbimpl) GetUserConversations(userID string) ([]Conversation, error) {
-	rows, err := db.c.Query(`
-		SELECT c.id, c.last_message, c.timestamp 
-		FROM conversations c
-		JOIN conversation_participants cp ON c.id = cp.conversation_id
-		WHERE cp.user_id = ?
-		ORDER BY c.timestamp DESC
-	`, userID)
-
-	if err != nil {
-		return nil, fmt.Errorf("error getting conversations: %w", err)
-	}
-	defer rows.Close()
-
-	var conversations []Conversation
-	for rows.Next() {
-		var conv Conversation
-		err := rows.Scan(&conv.ID, &conv.LastMessage, &conv.Timestamp)
-		if err != nil {
-			return nil, fmt.Errorf("error scanning conversation: %w", err)
-		}
-		conversations = append(conversations, conv)
-	}
-
-	return conversations, nil
+	_, err := db.c.Exec("UPDATE users SET photo_url = ? WHERE id = ?", photoURL, userID)
+	return err
 }

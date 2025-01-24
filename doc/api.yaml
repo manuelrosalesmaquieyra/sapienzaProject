@@ -88,6 +88,47 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
+  /conversations:
+    post:
+      tags: ["conversations"]
+      summary: Create new conversation
+      description: Creates a new conversation between users
+      operationId: createConversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                participants:
+                  type: array
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z0-9_-]+$'
+                  minItems: 2
+                  maxItems: 2  # For direct conversations
+                  example: ["John_Lennon", "Paul_McCartney"]
+              required:
+                - participants
+      responses:
+        '201':
+          description: Conversation created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conversation_id:
+                    type: string
+                    format: uuid
+                required:
+                  - conversation_id
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+          
   /users/{username}:
     parameters:
       - name: username

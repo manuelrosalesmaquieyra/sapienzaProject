@@ -28,13 +28,34 @@ func (db *appdbimpl) GetMessageByID(messageID string) (*Message, error) {
 
 // DeleteMessage elimina un mensaje por su ID
 func (db *appdbimpl) DeleteMessage(messageID string) error {
-	_, err := db.c.Exec(`
+	// First verify the message exists and get sender
+	var messageOwner string
+	err := db.c.QueryRow(`
+        SELECT sender 
+        FROM messages 
+        WHERE id = $1
+    `, messageID).Scan(&messageOwner)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("message not found")
+		}
+		return fmt.Errorf("error checking message: %v", err)
+	}
+
+	// Delete the message
+	result, err := db.c.Exec(`
         DELETE FROM messages
-        WHERE id = ?
+        WHERE id = $1
     `, messageID)
 
 	if err != nil {
-		return fmt.Errorf("error deleting message: %w", err)
+		return fmt.Errorf("error deleting message: %v", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil || rowsAffected == 0 {
+		return fmt.Errorf("message not found or already deleted")
 	}
 
 	return nil

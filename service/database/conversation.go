@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"time"
+
 	"github.com/google/uuid"
 )
 
@@ -40,10 +41,10 @@ func (db *appdbimpl) GetConversationMessages(conversationID string) ([]Message, 
 	}
 
 	rows, err := db.c.Query(`
-        SELECT id, sender, content, timestamp
+        SELECT id, conversation_id, sender, content, timestamp
         FROM messages
         WHERE conversation_id = ?
-        ORDER BY timestamp DESC
+        ORDER BY timestamp ASC
     `, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting messages: %w", err)
@@ -55,6 +56,7 @@ func (db *appdbimpl) GetConversationMessages(conversationID string) ([]Message, 
 		var msg Message
 		err := rows.Scan(
 			&msg.ID,
+			&msg.ConversationID,
 			&msg.Sender,
 			&msg.Content,
 			&msg.Time,
@@ -95,7 +97,7 @@ func (db *appdbimpl) SendMessage(conversationID string, senderID string, content
 		return nil, errors.New("sender is not part of the conversation")
 	}
 
-		tx, err := db.c.Begin()
+	tx, err := db.c.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("error starting transaction: %w", err)
 	}
@@ -140,19 +142,137 @@ func (db *appdbimpl) SendMessage(conversationID string, senderID string, content
 	return &msg, nil
 }
 
-// IsUserInConversation verifica si un usuario es participante de una conversación
-func (db *appdbimpl) IsUserInConversation(conversationID string, userID string) (bool, error) {
-	var isParticipant bool
+// IsUserInConversation checks if a user is part of a conversation
+func (db *appdbimpl) IsUserInConversation(username string, conversationId string) (bool, error) {
+	var count int
 	err := db.c.QueryRow(`
-        SELECT EXISTS(
-            SELECT 1 
-            FROM conversation_participants 
-            WHERE conversation_id = ? AND user_id = ?
-        )
-    `, conversationID, userID).Scan(&isParticipant)
+        SELECT COUNT(*) 
+        FROM conversation_participants 
+        WHERE conversation_id = ? AND user_id = ?`,
+		conversationId, username).Scan(&count)
 
 	if err != nil {
-		return false, fmt.Errorf("error checking participant: %w", err)
+		return false, fmt.Errorf("error checking conversation participant: %w", err)
 	}
-	return isParticipant, nil
+
+	return count > 0, nil
+}
+
+// CreateConversation creates a new conversation between users
+func (db *appdbimpl) CreateConversation(participants []string) (string, error) {
+	log.Printf("Creating conversation with participants: %v", participants)
+
+	tx, err := db.c.Begin()
+	if err != nil {
+		return "", fmt.Errorf("error starting transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Generate conversation ID
+	conversationID := generateUUID()
+	log.Printf("Generated conversation ID: %s", conversationID)
+
+	// Create conversation with current timestamp
+	_, err = tx.Exec(`
+        INSERT INTO conversations (id, timestamp, last_message)
+        VALUES (?, ?, ?)
+    `, conversationID, time.Now(), "")
+	if err != nil {
+		return "", fmt.Errorf("error creating conversation: %w", err)
+	}
+
+	// Add participants
+	for _, participant := range participants {
+		log.Printf("Adding participant: %s", participant)
+		_, err = tx.Exec(`
+            INSERT INTO conversation_participants (conversation_id, user_id)
+            VALUES (?, ?)
+        `, conversationID, participant)
+		if err != nil {
+			return "", fmt.Errorf("error adding participant: %w", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return "", fmt.Errorf("error committing transaction: %w", err)
+	}
+
+	log.Printf("Successfully created conversation %s with participants %v", conversationID, participants)
+	return conversationID, nil
+}
+
+// GetUserConversations obtiene todas las conversaciones de un usuario
+func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, error) { // Changed parameter to username
+	log.Printf("Getting conversations for user: %s", username)
+
+	rows, err := db.c.Query(`
+        SELECT DISTINCT c.id, COALESCE(c.last_message, ''), c.timestamp
+        FROM conversations c
+        JOIN conversation_participants cp ON c.id = cp.conversation_id
+        WHERE cp.user_id = ?
+        ORDER BY c.timestamp DESC`, username) // Using username directly
+	if err != nil {
+		return nil, fmt.Errorf("error getting conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var conversations []Conversation
+	for rows.Next() {
+		var conv Conversation
+		err := rows.Scan(&conv.ID, &conv.LastMessage, &conv.Timestamp)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning conversation: %w", err)
+		}
+
+		// Simplified query to get participants
+		pRows, err := db.c.Query(`
+            SELECT user_id 
+            FROM conversation_participants
+            WHERE conversation_id = ?`, conv.ID)
+		if err != nil {
+			return nil, fmt.Errorf("error getting participants: %w", err)
+		}
+		defer pRows.Close()
+
+		var participants []string
+		for pRows.Next() {
+			var p string
+			if err := pRows.Scan(&p); err != nil {
+				return nil, fmt.Errorf("error scanning participant: %w", err)
+			}
+			participants = append(participants, p)
+		}
+
+		conv.Participants = participants
+		log.Printf("Conversation %s has participants: %v", conv.ID, participants)
+		conversations = append(conversations, conv)
+	}
+
+	return conversations, nil
+}
+
+func (db *appdbimpl) CreateMessage(conversationId string, sender string, content string) (string, error) {
+	messageId := generateUUID()
+
+	_, err := db.c.Exec(`
+        INSERT INTO messages (id, conversation_id, sender, content, timestamp)
+        VALUES (?, ?, ?, ?, ?)`,
+		messageId, conversationId, sender, content, time.Now())
+
+	if err != nil {
+		return "", fmt.Errorf("error creating message: %w", err)
+	}
+
+	// Update last_message in conversation
+	_, err = db.c.Exec(`
+        UPDATE conversations 
+        SET last_message = ?
+        WHERE id = ?`,
+		content, conversationId)
+
+	if err != nil {
+		return "", fmt.Errorf("error updating conversation: %w", err)
+	}
+
+	return messageId, nil
 }

@@ -25,7 +25,7 @@ func (rt *_router) deleteMessage(w http.ResponseWriter, r *http.Request, ps http
 
 	// Verificar que el usuario es el remitente del mensaje
 	message, err := rt.db.GetMessageByID(messageID)
-	if err != nil || message.Sender != user.ID {
+	if err != nil || message.Sender != user.Username {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -42,31 +42,43 @@ func (rt *_router) deleteMessage(w http.ResponseWriter, r *http.Request, ps http
 
 // forwardMessage maneja POST conversations/{conversationId}/messages/{messageId}
 func (rt *_router) forwardMessage(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	targetConversationID := ps.ByName("conversationId")
 	messageID := ps.ByName("messageId")
-	conversationID := ps.ByName("conversationId")
-	if messageID == "" || conversationID == "" {
-		http.Error(w, "Message ID and Conversation ID are required", http.StatusBadRequest)
+
+	// If messageID is provided, it's a forward operation
+	if messageID != "" {
+		// Get authenticated user
+		user, err := rt.getUserFromToken(r)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Get original message
+		originalMessage, err := rt.db.GetMessageByID(messageID)
+		if err != nil {
+			http.Error(w, "Message not found", http.StatusNotFound)
+			return
+		}
+
+		// Create forwarded message with current user as sender
+		newMessageID, err := rt.db.CreateMessage(
+			targetConversationID,
+			user.Username, // Set current user as sender
+			originalMessage.Content,
+		)
+		if err != nil {
+			http.Error(w, "Failed to forward message", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{
+			"message_id": newMessageID,
+		})
 		return
 	}
 
-	// Verificar autenticación
-	user, err := rt.getUserFromToken(r)
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	// Reenviar mensaje
-	newMessage, err := rt.db.ForwardMessage(messageID, conversationID, user.ID)
-	if err != nil {
-		http.Error(w, "Failed to forward message", http.StatusInternalServerError)
-		return
-	}
-
-	// Devolver respuesta
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(newMessage); err != nil {
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
-		return
-	}
+	// If no messageID, handle as regular new message
+	// ... your existing new message creation code ...
 }

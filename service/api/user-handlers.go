@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"regexp"
 
@@ -143,42 +144,52 @@ func (rt *_router) setMyPhoto(w http.ResponseWriter, r *http.Request, ps httprou
 }
 
 // getUserConversations maneja GET /users/{username}/conversations
-func (rt *_router) getUserConversations(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	username := ps.ByName("username")
-	if username == "" {
-		http.Error(w, "Username is required", http.StatusBadRequest)
-		return
-	}
+// func (rt *_router) getUserConversations(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+// 	log.Printf("Handler called with user ID: %v", ps.ByName("username"))
+// 	username := ps.ByName("username")
+// 	if username == "" {
+// 		http.Error(w, "Username is required", http.StatusBadRequest)
+// 		return
+// 	}
 
-	// Get user from token
-	user, err := rt.getUserFromToken(r)
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
+// 	// Get user from token
+// 	user, err := rt.getUserFromToken(r)
+// 	if err != nil {
+// 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+// 		return
+// 	}
 
-	// Get conversations
-	conversations, err := rt.db.GetUserConversations(user.ID)
-	if err != nil {
-		http.Error(w, "Failed to get conversations", http.StatusInternalServerError)
-		return
-	}
+// 	// Get conversations
+// 	conversations, err := rt.db.GetUserConversations(user.ID)
+// 	if err != nil {
+// 		http.Error(w, "Failed to get conversations", http.StatusInternalServerError)
+// 		return
+// 	}
 
-	// Return conversations
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(conversations); err != nil {
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
-		return
-	}
-}
+// 	// Return conversations
+// 	w.Header().Set("Content-Type", "application/json")
+// 	if err := json.NewEncoder(w).Encode(conversations); err != nil {
+// 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+// 		return
+// 	}
+// }
 
 // Función auxiliar para obtener usuario desde token
 func (rt *_router) getUserFromToken(r *http.Request) (*database.User, error) {
 	authHeader := r.Header.Get("Authorization")
+	log.Printf("Auth header received: %s", authHeader)
+
 	if authHeader == "" || len(authHeader) <= 7 || authHeader[:7] != "Bearer " {
+		log.Printf("Invalid auth header format")
 		return nil, errors.New("invalid authorization header")
 	}
-	token := authHeader[7:]
 
-	return rt.db.GetUserByToken(token)
+	token := authHeader[7:]
+	log.Printf("Looking for token: %s", token)
+
+	user, err := rt.db.GetUserByToken(token)
+	if err != nil {
+		log.Printf("Error getting user by token: %v", err)
+	}
+	return user, err
 }

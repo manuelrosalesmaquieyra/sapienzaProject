@@ -67,6 +67,10 @@ type AppDatabase interface {
 	LeaveGroup(groupID string, userID string) error
 
 	CreateSession(name string) (*Session, error)
+
+	CreateConversation(participants []string) (string, error)
+
+	CreateMessage(conversationId string, sender string, content string) (string, error)
 }
 
 type appdbimpl struct {
@@ -125,11 +129,37 @@ func New(db *sql.DB) (AppDatabase, error) {
 		identifier TEXT PRIMARY KEY,
 		username TEXT NOT NULL,
 		FOREIGN KEY (username) REFERENCES users(username)
+	);
+
+	CREATE TABLE IF NOT EXISTS groups (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		photo_url TEXT
+	);
+
+	CREATE TABLE IF NOT EXISTS group_members (
+		group_id TEXT,
+		user_id TEXT,
+		FOREIGN KEY (group_id) REFERENCES groups(id),
+		FOREIGN KEY (user_id) REFERENCES users(id),
+		PRIMARY KEY (group_id, user_id)
 	);`
 
 	if _, err := db.Exec(sqlStmt); err != nil {
 		return nil, fmt.Errorf("error creating database schema: %w", err)
 	}
+
+	// // After creating tables, insert test users
+	// sqlStmt = `
+	// INSERT OR IGNORE INTO users (id, username, token)
+	// VALUES
+	// 	('user1', 'manuel1', 'token1'),
+	// 	('user2', 'manueltest', 'token2');
+	// `
+	// if _, err := db.Exec(sqlStmt); err != nil {
+	// 	return nil, fmt.Errorf("error inserting test users: %w", err)
+	// }
 
 	return &appdbimpl{
 		c: db,
