@@ -47,9 +47,12 @@ func (rt *_router) getConversationMessages(w http.ResponseWriter, r *http.Reques
 
 	// Return messages
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"messages": messages,
-	})
+	}); err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // sendMessage maneja POST /conversations/{conversationId}/messages
@@ -87,9 +90,12 @@ func (rt *_router) sendMessage(w http.ResponseWriter, r *http.Request, ps httpro
 
 	// Return response
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"message_id": messageId,
-	})
+	}); err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // createConversation handles POST /conversations
@@ -137,9 +143,12 @@ func (rt *_router) createConversation(w http.ResponseWriter, r *http.Request, _ 
 	// Return response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"conversation_id": conversationID,
-	})
+	}); err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // getUserConversations maneja GET /users/{username}/conversations
@@ -173,5 +182,47 @@ func (rt *_router) getUserConversations(w http.ResponseWriter, r *http.Request, 
 
 	// Return conversations
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(conversations)
+	if err := json.NewEncoder(w).Encode(conversations); err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (rt *_router) getConversation(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	// Get conversation ID from params
+	conversationId := ps.ByName("conversationId")
+
+	// Get user from token
+	user, err := rt.getUserFromToken(r)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Check if user is in conversation
+	isParticipant, err := rt.db.IsUserInConversation(user.Username, conversationId)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !isParticipant {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get messages
+	messages, err := rt.db.GetConversationMessages(conversationId)
+	if err != nil {
+		http.Error(w, "Failed to get messages", http.StatusInternalServerError)
+		return
+	}
+
+	// Send response
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
+		"messages": messages,
+	}); err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
 }

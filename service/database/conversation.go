@@ -67,6 +67,10 @@ func (db *appdbimpl) GetConversationMessages(conversationID string) ([]Message, 
 		messages = append(messages, msg)
 	}
 
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
 	return messages, nil
 }
 
@@ -243,9 +247,17 @@ func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, erro
 			participants = append(participants, p)
 		}
 
+		if err = pRows.Err(); err != nil {
+			return nil, fmt.Errorf("error iterating participant rows: %w", err)
+		}
+
 		conv.Participants = participants
 		log.Printf("Conversation %s has participants: %v", conv.ID, participants)
 		conversations = append(conversations, conv)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
 
 	return conversations, nil

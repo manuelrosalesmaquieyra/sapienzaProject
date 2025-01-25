@@ -73,9 +73,12 @@ func (rt *_router) forwardMessage(w http.ResponseWriter, r *http.Request, ps htt
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{
+		if err := json.NewEncoder(w).Encode(map[string]string{
 			"message_id": newMessageID,
-		})
+		}); err != nil {
+			http.Error(w, "Error encoding response", http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 

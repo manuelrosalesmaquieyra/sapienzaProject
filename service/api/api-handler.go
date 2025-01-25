@@ -26,6 +26,7 @@ func (rt *_router) Handler() http.Handler {
 	rt.router.GET("/conversations/:conversationId/messages", rt.getConversationMessages)
 	rt.router.GET("/users/:username/conversations", rt.getUserConversations)
 	rt.router.POST("/conversations", rt.createConversation)
+	rt.router.GET("/conversations/:conversationId", rt.getConversation)
 
 	// Reaction routes
 	rt.router.POST("/conversations/:conversationId/messages/:messageId/reactions", rt.addReaction)
