@@ -2,15 +2,18 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
 )
 
-// addReaction maneja POST /conversations/{conversation_id}/messages/{message_id}/reactions
+// addReaction maneja POST /conversations/{conversationId}/messages/{messageId}/reactions
 func (rt *_router) addReaction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	messageID := ps.ByName("messageId")
-	if messageID == "" {
+	messageId := ps.ByName("messageId")
+	//conversationId := ps.ByName("conversationId")
+
+	if messageId == "" {
 		http.Error(w, "Message ID is required", http.StatusBadRequest)
 		return
 	}
@@ -31,8 +34,10 @@ func (rt *_router) addReaction(w http.ResponseWriter, r *http.Request, ps httpro
 		return
 	}
 
+	fmt.Printf("Adding reaction - MessageID: %s, UserID: %s, Reaction: %s\n", messageId, user.ID, requestBody.Reaction)
+
 	// Añadir reacción
-	err = rt.db.AddReaction(messageID, user.ID, requestBody.Reaction)
+	err = rt.db.AddReaction(messageId, user.ID, requestBody.Reaction)
 	if err != nil {
 		http.Error(w, "Failed to add reaction", http.StatusInternalServerError)
 		return
@@ -41,10 +46,12 @@ func (rt *_router) addReaction(w http.ResponseWriter, r *http.Request, ps httpro
 	w.WriteHeader(http.StatusCreated)
 }
 
-// removeReaction maneja DELETE /conversations/{conversation_id}/messages/{message_id}/reactions
+// removeReaction maneja DELETE /conversations/{conversationId}/messages/{messageId}/reactions
 func (rt *_router) removeReaction(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	messageID := ps.ByName("messageId")
-	if messageID == "" {
+	messageId := ps.ByName("messageId")
+	conversationId := ps.ByName("conversationId")
+
+	if messageId == "" {
 		http.Error(w, "Message ID is required", http.StatusBadRequest)
 		return
 	}
@@ -56,9 +63,12 @@ func (rt *_router) removeReaction(w http.ResponseWriter, r *http.Request, ps htt
 		return
 	}
 
+	fmt.Printf("Removing reaction - MessageID: %s, UserID: %s, ConversationID: %s\n", messageId, user.ID, conversationId)
+
 	// Eliminar reacción
-	err = rt.db.RemoveReaction(messageID, user.ID)
+	err = rt.db.RemoveReaction(messageId, user.ID)
 	if err != nil {
+		fmt.Printf("Error removing reaction: %v\n", err)
 		http.Error(w, "Failed to remove reaction", http.StatusInternalServerError)
 		return
 	}

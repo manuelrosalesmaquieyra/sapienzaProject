@@ -1,9 +1,11 @@
 package database
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,36 +42,70 @@ func (db *appdbimpl) GetConversationMessages(conversationID string) ([]Message, 
 		return nil, errors.New("conversation not found")
 	}
 
+	// Get messages with their reactions
 	rows, err := db.c.Query(`
-        SELECT id, conversation_id, sender, content, timestamp
-        FROM messages
-        WHERE conversation_id = ?
-        ORDER BY timestamp ASC
+        SELECT m.id, m.conversation_id, m.sender, m.content, m.timestamp,
+               r.user_id, r.reaction
+        FROM messages m
+        LEFT JOIN reactions r ON m.id = r.message_id
+        WHERE m.conversation_id = ?
+        ORDER BY m.timestamp ASC
     `, conversationID)
 	if err != nil {
 		return nil, fmt.Errorf("error getting messages: %w", err)
 	}
 	defer rows.Close()
 
-	var messages []Message
+	messageMap := make(map[string]*Message)
+
 	for rows.Next() {
 		var msg Message
+		var userID, reaction sql.NullString
+
 		err := rows.Scan(
 			&msg.ID,
 			&msg.ConversationID,
 			&msg.Sender,
 			&msg.Content,
 			&msg.Time,
+			&userID,
+			&reaction,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning message: %w", err)
 		}
-		messages = append(messages, msg)
+
+		// Get or create message in map
+		existingMsg, exists := messageMap[msg.ID]
+		if !exists {
+			msg.Reactions = make([]Reaction, 0)
+			messageMap[msg.ID] = &msg
+			existingMsg = &msg
+		}
+
+		// Add reaction if present
+		if userID.Valid && reaction.Valid {
+			existingMsg.Reactions = append(existingMsg.Reactions, Reaction{
+				UserID:   userID.String,
+				Reaction: reaction.String,
+			})
+		}
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating rows: %w", err)
 	}
+
+	// Convert map to slice
+	messages := make([]Message, 0, len(messageMap))
+	for _, msg := range messageMap {
+		messages = append(messages, *msg)
+	}
+
+	// Sort by timestamp
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Time.Before(messages[j].Time)
+	})
 
 	return messages, nil
 }

@@ -50,7 +50,17 @@ export const api = {
 
     // Get conversation messages
     async getConversationMessages(conversationId) {
-        return apiCall(`/conversations/${conversationId}/messages`)
+        const response = await fetch(`${API_URL}/conversations/${conversationId}/messages`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('sessionId')}`
+            }
+        })
+        
+        if (!response.ok) throw new Error('Failed to fetch messages')
+        const data = await response.json()
+        return data
     },
 
     // Create group
@@ -101,9 +111,32 @@ export const api = {
     },
 
     addReaction: async (messageId, emoji, conversationId) => {
-        return await apiCall(`/conversations/${conversationId}/messages/${messageId}/reactions`, {
+        const response = await fetch(`${API_URL}/conversations/${conversationId}/messages/${messageId}/reactions`, {
             method: 'POST',
-            body: JSON.stringify({ reaction: emoji })
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('sessionId')}`
+            },
+            body: JSON.stringify({ 
+                reaction: emoji 
+            })
         })
+        if (!response.ok) throw new Error('Failed to add reaction')
+        
+        // Don't try to parse JSON if there's no content
+        const text = await response.text()
+        return text.length > 0 ? JSON.parse(text) : {}
+    },
+
+    deleteReaction: async (messageId, conversationId) => {
+        const response = await fetch(`${API_URL}/conversations/${conversationId}/messages/${messageId}/reactions`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('sessionId')}`
+            }
+        })
+        if (!response.ok) throw new Error('Failed to delete reaction')
+        return {}
     }
 }

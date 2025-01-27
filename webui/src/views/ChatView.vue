@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MainLayout from '../layouts/MainLayout.vue'
 import { api } from '../services/api'
@@ -32,22 +32,9 @@ const fetchMessages = async () => {
     try {
         loading.value = true
         const data = await api.getConversationMessages(conversationId.value)
-        // Store current scroll position
-        const scrollPos = messagesContainer.value?.scrollTop
-        const isScrolledToBottom = messagesContainer.value?.scrollHeight - messagesContainer.value?.scrollTop === messagesContainer.value?.clientHeight
-        
         messages.value = data.messages
-        
-        // Wait for DOM update
-        await nextTick(() => {
-            if (isScrolledToBottom) {
-                // If was at bottom, scroll to new bottom
-                messagesContainer.value?.scrollTo(0, messagesContainer.value.scrollHeight)
-            } else if (scrollPos) {
-                // Otherwise restore previous position
-                messagesContainer.value?.scrollTo(0, scrollPos)
-            }
-        })
+        // Add this debug log
+        console.log('Messages with reactions:', messages.value)
     } catch (err) {
         error.value = 'Failed to load messages'
         console.error('Error:', err)
@@ -139,23 +126,54 @@ const confirmForward = async (targetConversationId) => {
   }
 }
 
-const reactions = ['👍', '❤️', '😂', '😮', '😢', '😡']
+// Revert back to original reactions
+const reactions = [':)', ':(', ':D', ':P', '<3']
+
+// Add click away event listener
+const closeReactionModal = (event) => {
+  // Check if click is outside the reaction modal
+  if (showReactionModal.value && 
+      !event.target.closest('.reaction-modal') && 
+      !event.target.closest('.react-btn')) {
+    showReactionModal.value = false
+    selectedMessage.value = null
+  }
+}
+
+// Add method to delete reaction
+const handleReactionDelete = (messageId, reaction) => {
+  console.log('Button clicked!', {
+    messageId,
+    reaction,
+    currentUsername: currentUsername.value
+  })
+  deleteReaction(messageId)
+}
+
+const deleteReaction = async (messageId) => {
+  console.log('Attempting to delete reaction:', {
+    messageId,
+    conversationId: conversationId.value
+  })
+  try {
+    await api.deleteReaction(messageId, conversationId.value)
+    console.log('Reaction deleted successfully')
+    await fetchMessages()
+  } catch (err) {
+    console.error('Error deleting reaction:', err)
+  }
+}
+
 const showReactionModal = ref(false)
 const selectedMessage = ref(null)
 
-const showReactions = (message) => {
-  selectedMessage.value = message.message_id
+const showReactions = (msg) => {
+  selectedMessage.value = msg.message_id
   showReactionModal.value = true
 }
 
 const addReaction = async (messageId, emoji) => {
   try {
-    // Verify emoji length
-    if (emoji.length < 1 || emoji.length > 5) {
-      console.error('Emoji must be between 1 and 5 characters')
-      return
-    }
-    
     await api.addReaction(messageId, emoji, conversationId.value)
     showReactionModal.value = false
     selectedMessage.value = null
@@ -165,8 +183,63 @@ const addReaction = async (messageId, emoji) => {
   }
 }
 
+const handleReactionClick = async (messageId, reaction) => {
+    // Store current scroll position
+    const container = document.querySelector('.messages-area')
+    const scrollPosition = container ? container.scrollTop : 0
+    
+    try {
+        await api.deleteReaction(messageId, conversationId.value)
+        await fetchMessages()
+        
+        // Restore scroll position
+        if (container) {
+            container.scrollTop = scrollPosition
+        }
+    } catch (err) {
+        // Silently ignore errors - these will occur when clicking reactions we don't own
+        console.error('Error deleting reaction:', err)
+    }
+}
+
+const getModalStyle = (msg) => {
+  const messageEl = document.querySelector(`[data-message-id="${msg.message_id}"]`)
+  if (!messageEl) return {}
+
+  const rect = messageEl.getBoundingClientRect()
+  const chatContainer = messageEl.closest('.chat-container')
+  if (!chatContainer) return {}
+
+  const containerRect = chatContainer.getBoundingClientRect()
+  const topSpace = rect.top - containerRect.top
+  const bottomSpace = containerRect.bottom - rect.bottom
+
+  // If there's more space at the bottom, show below
+  if (bottomSpace > topSpace) {
+    return {
+      top: '100%',
+      bottom: 'auto',
+      marginTop: '8px'
+    }
+  }
+  // Otherwise show above
+  return {
+    bottom: '100%',
+    top: 'auto',
+    marginBottom: '8px'
+  }
+}
+
 onMounted(() => {
     fetchMessages()
+    document.addEventListener('click', closeReactionModal)
+    // Add this debug log
+    console.log('Current username:', currentUsername.value)
+})
+
+onUnmounted(() => {
+    // Clean up listener
+    document.removeEventListener('click', closeReactionModal)
 })
 </script>
 
@@ -194,10 +267,23 @@ onMounted(() => {
         <template v-else>
           <div v-for="msg in messages" 
                :key="msg.message_id" 
-               :class="['message', msg.sender === currentUsername ? 'sent' : 'received']">
+               :class="['message', msg.sender === currentUsername ? 'sent' : 'received']"
+               style="position: relative;">
             <div class="message-sender">{{ msg.sender }}</div>
             <div class="message-content">
               {{ msg.content }}
+              <!-- Show reactions -->
+              <div v-if="msg.reactions && msg.reactions.length > 0" class="message-reaction">
+                <span class="reaction-label">Reaction:</span>
+                <template v-for="reaction in msg.reactions" :key="`${msg.message_id}-${reaction.user_id}`">
+                  <div 
+                    class="reaction-emoji"
+                    @click="handleReactionClick(msg.message_id, reaction)"
+                  >
+                    {{ reaction.reaction }}
+                  </div>
+                </template>
+              </div>
               <div class="message-actions">
                 <button v-if="msg.sender === currentUsername" 
                         class="action-btn delete-btn"
@@ -210,23 +296,25 @@ onMounted(() => {
                 </button>
                 <button class="action-btn react-btn"
                         @click="showReactions(msg)">
-                  😀
+                  😊
                 </button>
-              </div>
-              <!-- Reaction Modal -->
-              <div v-if="showReactionModal && selectedMessage === msg.message_id" 
-                   class="reaction-modal">
-                <div class="reaction-list">
-                  <button v-for="emoji in reactions" 
-                          :key="emoji"
-                          class="reaction-btn"
-                          @click="addReaction(msg.message_id, emoji)">
-                    {{ emoji }}
-                  </button>
-                </div>
               </div>
             </div>
             <div class="message-time">{{ new Date(msg.timestamp).toLocaleTimeString() }}</div>
+            <!-- Reaction Modal -->
+            <div v-if="showReactionModal && selectedMessage === msg.message_id" 
+                 class="reaction-modal"
+                 :class="{ 'sent-modal': msg.sender === currentUsername }"
+                 :style="getModalStyle(msg)">
+              <div class="reaction-list">
+                <button v-for="emoji in reactions"
+                        :key="emoji"
+                        class="reaction-btn"
+                        @click="addReaction(msg.message_id, emoji)">
+                  {{ emoji }}
+                </button>
+              </div>
+            </div>
           </div>
         </template>
       </div>
@@ -477,34 +565,111 @@ onMounted(() => {
   background: #d32f2f;
 }
 
+.message-reaction {
+  margin-top: 4px;
+  font-size: 0.9em;
+  color: #666;
+  user-select: none;
+}
+
+.reaction-label {
+  opacity: 0.7;
+}
+
+.reaction-emoji {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: 0 2px;
+  font-family: monospace;
+  border-radius: 4px;
+}
+
+.my-reaction {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: 0 2px;
+  cursor: pointer;
+  background-color: rgba(0,0,0,0.1);
+  border-radius: 4px;
+}
+
+.sent .my-reaction {
+  background-color: rgba(255,255,255,0.2);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.sent .message-reaction {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .reaction-modal {
   position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   padding: 8px;
-  margin-bottom: 8px;
   z-index: 100;
+  width: max-content;
+  left: 0;
+}
+
+.sent-modal {
+  left: auto;
+  right: 0;
+}
+
+/* For modals near the bottom of the screen */
+.message:last-child .reaction-modal {
+  top: auto;
+  bottom: 0;
 }
 
 .reaction-list {
   display: flex;
-  gap: 4px;
+  gap: 8px;
 }
 
 .reaction-btn {
   background: none;
-  border: none;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 1.1em;
   cursor: pointer;
-  padding: 4px;
-  font-size: 20px;
-  transition: transform 0.2s;
+  padding: 4px 8px;
 }
 
 .reaction-btn:hover {
-  transform: scale(1.2);
+  background: #f0f0f0;
+}
+
+.action-btn {
+  font-family: monospace;
+}
+
+.reaction-emoji.clickable {
+  cursor: pointer;
+}
+
+.reaction-emoji.clickable:hover {
+  opacity: 0.7;
+}
+
+.reaction-button {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  margin: 0 2px;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.reaction-button:hover {
+  opacity: 0.7;
 }
 </style>
