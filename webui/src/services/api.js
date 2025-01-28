@@ -141,12 +141,24 @@ export const api = {
     },
 
     updateUsername: async (currentUsername, newUsername) => {
-        return apiCall(`/users/${currentUsername}`, {
+        const response = await fetch(`${API_URL}/users/${currentUsername}`, {
             method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('sessionId')}`,
+            },
             body: JSON.stringify({
                 new_name: newUsername
             })
-        })
+        });
+
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(error || 'Failed to update username');
+        }
+
+        const data = await response.json();
+        return data;
     },
 
     updateProfilePhoto: async (username, photoUrl) => {

@@ -93,15 +93,28 @@ const handleUsernameUpdate = async () => {
   }
 
   try {
+    usernameError.value = ''
     const response = await api.updateUsername(currentUsername.value, newUsername.value)
+    
+    // Update local storage and state
     localStorage.setItem('username', response.username)
     currentUsername.value = response.username
     newUsername.value = ''
-    usernameError.value = ''
     
+    // Show success message
+    alert('Username updated successfully!')
+    
+    // Optional: redirect to home
     router.push('/home')
   } catch (err) {
-    usernameError.value = 'Failed to update username'
+    // Handle specific error cases
+    if (err.message.includes('already taken')) {
+      usernameError.value = 'This username is already taken'
+    } else if (err.message.includes('invalid')) {
+      usernameError.value = 'Invalid username format'
+    } else {
+      usernameError.value = 'Failed to update username. Please try again.'
+    }
     console.error('Error updating username:', err)
   }
 }
