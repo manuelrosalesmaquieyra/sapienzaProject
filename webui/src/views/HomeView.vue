@@ -93,7 +93,7 @@ const handleNewChat = async () => {
 
       <!-- Conversations List -->
       <div class="conversations-list">
-        <div v-if="conversations.length === 0" class="empty-state">
+        <div v-if="!conversations || conversations.length === 0" class="empty-state">
           No {{ activeTab }} yet
         </div>
         <div 
@@ -105,7 +105,7 @@ const handleNewChat = async () => {
             name: 'chat',
             params: { 
               conversation_id: conv.conversation_id,
-              conversation: conv  // Pass the full conversation object
+              conversation: conv
             }
           })"
         >

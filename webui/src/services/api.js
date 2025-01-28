@@ -138,5 +138,23 @@ export const api = {
         })
         if (!response.ok) throw new Error('Failed to delete reaction')
         return {}
+    },
+
+    updateUsername: async (currentUsername, newUsername) => {
+        return apiCall(`/users/${currentUsername}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                new_name: newUsername
+            })
+        })
+    },
+
+    updateProfilePhoto: async (username, photoUrl) => {
+        return apiCall(`/users/${username}/photo`, {
+            method: 'POST',
+            body: JSON.stringify({
+                photo_url: photoUrl
+            })
+        })
     }
 }

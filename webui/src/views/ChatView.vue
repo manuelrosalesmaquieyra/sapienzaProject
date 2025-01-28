@@ -173,33 +173,43 @@ const showReactions = (msg) => {
 }
 
 const addReaction = async (messageId, emoji) => {
+  const container = document.querySelector('.messages-area')
+  const scrollPosition = container ? container.scrollTop : 0
+  
   try {
     await api.addReaction(messageId, emoji, conversationId.value)
     showReactionModal.value = false
     selectedMessage.value = null
+    
+    // Update messages but maintain scroll position
     await fetchMessages()
+    await nextTick(() => {
+      if (container) {
+        container.scrollTop = scrollPosition
+      }
+    })
   } catch (err) {
     console.error('Error adding reaction:', err)
   }
 }
 
 const handleReactionClick = async (messageId, reaction) => {
-    // Store current scroll position
-    const container = document.querySelector('.messages-area')
-    const scrollPosition = container ? container.scrollTop : 0
+  const container = document.querySelector('.messages-area')
+  const scrollPosition = container ? container.scrollTop : 0
+  
+  try {
+    await api.deleteReaction(messageId, conversationId.value)
     
-    try {
-        await api.deleteReaction(messageId, conversationId.value)
-        await fetchMessages()
-        
-        // Restore scroll position
-        if (container) {
-            container.scrollTop = scrollPosition
-        }
-    } catch (err) {
-        // Silently ignore errors - these will occur when clicking reactions we don't own
-        console.error('Error deleting reaction:', err)
-    }
+    // Update messages but maintain scroll position
+    await fetchMessages()
+    await nextTick(() => {
+      if (container) {
+        container.scrollTop = scrollPosition
+      }
+    })
+  } catch (err) {
+    console.error('Error deleting reaction:', err)
+  }
 }
 
 const getModalStyle = (msg) => {

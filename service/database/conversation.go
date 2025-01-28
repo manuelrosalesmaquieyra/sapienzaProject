@@ -187,8 +187,9 @@ func (db *appdbimpl) IsUserInConversation(username string, conversationId string
 	var count int
 	err := db.c.QueryRow(`
         SELECT COUNT(*) 
-        FROM conversation_participants 
-        WHERE conversation_id = ? AND user_id = ?`,
+        FROM conversation_participants cp
+        JOIN users u ON cp.user_id = u.id
+        WHERE cp.conversation_id = ? AND u.username = ?`,
 		conversationId, username).Scan(&count)
 
 	if err != nil {
@@ -221,13 +222,22 @@ func (db *appdbimpl) CreateConversation(participants []string) (string, error) {
 		return "", fmt.Errorf("error creating conversation: %w", err)
 	}
 
-	// Add participants
-	for _, participant := range participants {
-		log.Printf("Adding participant: %s", participant)
+	// Add participants using their user IDs
+	for _, username := range participants {
+		// Get user ID for the username
+		var userID string
+		err := tx.QueryRow(`
+            SELECT id FROM users WHERE username = ?
+        `, username).Scan(&userID)
+		if err != nil {
+			return "", fmt.Errorf("error getting user ID for %s: %w", username, err)
+		}
+
+		log.Printf("Adding participant: %s (ID: %s)", username, userID)
 		_, err = tx.Exec(`
             INSERT INTO conversation_participants (conversation_id, user_id)
             VALUES (?, ?)
-        `, conversationID, participant)
+        `, conversationID, userID)
 		if err != nil {
 			return "", fmt.Errorf("error adding participant: %w", err)
 		}
@@ -242,15 +252,16 @@ func (db *appdbimpl) CreateConversation(participants []string) (string, error) {
 }
 
 // GetUserConversations obtiene todas las conversaciones de un usuario
-func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, error) { // Changed parameter to username
+func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, error) {
 	log.Printf("Getting conversations for user: %s", username)
 
 	rows, err := db.c.Query(`
         SELECT DISTINCT c.id, COALESCE(c.last_message, ''), c.timestamp
         FROM conversations c
         JOIN conversation_participants cp ON c.id = cp.conversation_id
-        WHERE cp.user_id = ?
-        ORDER BY c.timestamp DESC`, username) // Using username directly
+        JOIN users u ON cp.user_id = u.id
+        WHERE u.username = ?
+        ORDER BY c.timestamp DESC`, username)
 	if err != nil {
 		return nil, fmt.Errorf("error getting conversations: %w", err)
 	}
@@ -264,11 +275,12 @@ func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, erro
 			return nil, fmt.Errorf("error scanning conversation: %w", err)
 		}
 
-		// Simplified query to get participants
+		// Get participants with their usernames
 		pRows, err := db.c.Query(`
-            SELECT user_id 
-            FROM conversation_participants
-            WHERE conversation_id = ?`, conv.ID)
+            SELECT u.username 
+            FROM conversation_participants cp
+            JOIN users u ON cp.user_id = u.id
+            WHERE cp.conversation_id = ?`, conv.ID)
 		if err != nil {
 			return nil, fmt.Errorf("error getting participants: %w", err)
 		}

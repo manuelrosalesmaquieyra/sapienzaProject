@@ -37,11 +37,18 @@ func (db *appdbimpl) GetUserByToken(token string) (*User, error) {
 	return &user, nil
 }
 
-// UpdateUsername actualiza el nombre de usuario
+// UpdateUsername actualiza el nombre de usuario y todas sus referencias
 func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
-	// Primero verificamos si el nuevo username ya existe
+	// Start a transaction
+	tx, err := db.c.Begin()
+	if err != nil {
+		return fmt.Errorf("error starting transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Check if new username already exists
 	var exists bool
-	err := db.c.QueryRow(
+	err = tx.QueryRow(
 		"SELECT EXISTS(SELECT 1 FROM users WHERE username = ? AND id != ?)",
 		newUsername, userID,
 	).Scan(&exists)
@@ -54,8 +61,8 @@ func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
 		return errors.New("username already taken")
 	}
 
-	// Si no existe, actualizamos el username
-	result, err := db.c.Exec(
+	// Update username in users table
+	_, err = tx.Exec(
 		"UPDATE users SET username = ? WHERE id = ?",
 		newUsername, userID,
 	)
@@ -63,13 +70,27 @@ func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
 		return fmt.Errorf("error updating username: %w", err)
 	}
 
-	rows, err := result.RowsAffected()
+	// Update username in messages table (sender field)
+	_, err = tx.Exec(
+		"UPDATE messages SET sender = ? WHERE sender = ?",
+		newUsername, userID,
+	)
 	if err != nil {
-		return fmt.Errorf("error checking update result: %w", err)
+		return fmt.Errorf("error updating message senders: %w", err)
 	}
 
-	if rows == 0 {
-		return errors.New("user not found")
+	// Update username in sessions table
+	_, err = tx.Exec(
+		"UPDATE sessions SET username = ? WHERE username = ?",
+		newUsername, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("error updating sessions: %w", err)
+	}
+
+	// Commit the transaction
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("error committing transaction: %w", err)
 	}
 
 	return nil
