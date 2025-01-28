@@ -39,12 +39,21 @@ func (db *appdbimpl) GetUserByToken(token string) (*User, error) {
 
 // UpdateUsername actualiza el nombre de usuario y todas sus referencias
 func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
-	// Start a transaction
 	tx, err := db.c.Begin()
 	if err != nil {
 		return fmt.Errorf("error starting transaction: %w", err)
 	}
 	defer tx.Rollback()
+
+	// Get the old username first
+	var oldUsername string
+	err = tx.QueryRow(
+		"SELECT username FROM users WHERE id = ?",
+		userID,
+	).Scan(&oldUsername)
+	if err != nil {
+		return fmt.Errorf("error getting old username: %w", err)
+	}
 
 	// Check if new username already exists
 	var exists bool
@@ -73,7 +82,7 @@ func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
 	// Update username in messages table (sender field)
 	_, err = tx.Exec(
 		"UPDATE messages SET sender = ? WHERE sender = ?",
-		newUsername, userID,
+		newUsername, oldUsername,
 	)
 	if err != nil {
 		return fmt.Errorf("error updating message senders: %w", err)
@@ -82,13 +91,12 @@ func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
 	// Update username in sessions table
 	_, err = tx.Exec(
 		"UPDATE sessions SET username = ? WHERE username = ?",
-		newUsername, userID,
+		newUsername, oldUsername,
 	)
 	if err != nil {
 		return fmt.Errorf("error updating sessions: %w", err)
 	}
 
-	// Commit the transaction
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("error committing transaction: %w", err)
 	}
