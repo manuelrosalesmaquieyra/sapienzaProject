@@ -35,25 +35,35 @@ const handleLogout = () => {
 .app-header {
   background: #333;
   color: white;
-  padding: 1rem;
+  padding: 0.5rem 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  height: 50px;
+}
+
+.app-header h1 {
+  font-size: 1.5rem;
+  margin: 0;
 }
 
 .header-controls {
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   align-items: center;
 }
 
+.profile-btn, .logout-btn {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.9rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
 .profile-btn {
-  padding: 0.5rem 1rem;
   background: #4CAF50;
   color: white;
   border: none;
-  border-radius: 4px;
-  cursor: pointer;
   text-decoration: none;
 }
 
@@ -62,12 +72,9 @@ const handleLogout = () => {
 }
 
 .logout-btn {
-  padding: 0.5rem 1rem;
   background: #dc3545;
   color: white;
   border: none;
-  border-radius: 4px;
-  cursor: pointer;
 }
 
 .logout-btn:hover {

@@ -15,6 +15,7 @@ func (rt *_router) Handler() http.Handler {
 	// User routes
 	rt.router.PUT("/users/:username", rt.setMyUserName)
 	rt.router.POST("/users/:username/photo", rt.setMyPhoto)
+	rt.router.GET("/users/:username", rt.getUser)
 
 	// Group routes
 	rt.router.POST("/groups", rt.createGroup)
@@ -27,6 +28,7 @@ func (rt *_router) Handler() http.Handler {
 	rt.router.GET("/users/:username/conversations", rt.getUserConversations)
 	rt.router.POST("/conversations", rt.createConversation)
 	rt.router.GET("/conversations/:conversationId", rt.getConversation)
+	rt.router.GET("/conversations/:conversationId/details", rt.getConversationDetails)
 
 	// Reaction routes
 	rt.router.POST("/conversations/:conversationId/messages/:messageId/reactions", rt.addReaction)

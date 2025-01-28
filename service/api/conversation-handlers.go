@@ -226,3 +226,43 @@ func (rt *_router) getConversation(w http.ResponseWriter, r *http.Request, ps ht
 		return
 	}
 }
+
+func (rt *_router) getConversationDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	conversationId := ps.ByName("conversationId")
+	if conversationId == "" {
+		http.Error(w, "Conversation ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get authenticated user
+	user, err := rt.getUserFromToken(r)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Verify user is part of the conversation
+	isParticipant, err := rt.db.IsUserInConversation(user.Username, conversationId)
+	if err != nil {
+		http.Error(w, "Error checking conversation access", http.StatusInternalServerError)
+		return
+	}
+	if !isParticipant {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get conversation details including participants
+	participants, err := rt.db.GetConversationParticipants(conversationId)
+	if err != nil {
+		http.Error(w, "Failed to get conversation details", http.StatusInternalServerError)
+		return
+	}
+
+	// Return conversation details
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"conversation_id": conversationId,
+		"participants":    participants,
+	})
+}

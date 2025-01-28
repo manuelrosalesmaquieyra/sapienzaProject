@@ -51,6 +51,9 @@
             Update Photo
           </button>
         </div>
+        <button @click="handleRemovePhoto" class="remove-photo-btn">
+          Remove Photo
+        </button>
         <span v-if="photoError" class="error">{{ photoError }}</span>
       </div>
     </div>
@@ -58,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/services/api'
 
@@ -84,6 +87,25 @@ const isValidUrl = computed(() => {
   } catch {
     return false
   }
+})
+
+const fetchUserData = async () => {
+  try {
+    const username = localStorage.getItem('username')
+    console.log('Fetching data for username:', username)
+    if (username) {
+      const userData = await api.getUserProfile(username)
+      console.log('Received user data:', userData)
+      currentPhotoUrl.value = userData.photo_url
+      console.log('Set currentPhotoUrl to:', currentPhotoUrl.value)
+    }
+  } catch (err) {
+    console.error('Error fetching user data:', err)
+  }
+}
+
+onMounted(() => {
+  fetchUserData()
 })
 
 const handleUsernameUpdate = async () => {
@@ -130,9 +152,20 @@ const handlePhotoUpdate = async () => {
     currentPhotoUrl.value = response.photo_url
     photoUrl.value = ''
     photoError.value = ''
+    await fetchUserData()
   } catch (err) {
     photoError.value = 'Failed to update profile photo'
     console.error('Error updating photo:', err)
+  }
+}
+
+const handleRemovePhoto = async () => {
+  try {
+    await api.updateProfilePhoto(currentUsername.value, "")  // Send empty string
+    currentPhotoUrl.value = ""
+  } catch (err) {
+    photoError.value = 'Failed to remove photo'
+    console.error('Error removing photo:', err)
   }
 }
 </script>
@@ -262,5 +295,10 @@ button:disabled {
   color: #dc3545;
   font-size: 0.9rem;
   margin-top: 0.5rem;
+}
+
+.remove-photo-btn {
+  background: #dc3545;  /* Red color for delete action */
+  margin-top: 1rem;
 }
 </style> 

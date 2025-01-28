@@ -106,6 +106,32 @@ func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
 
 // UpdateUserPhoto actualiza la foto de perfil del usuario
 func (db *appdbimpl) UpdateUserPhoto(userID string, photoURL string) error {
-	_, err := db.c.Exec("UPDATE users SET photo_url = ? WHERE id = ?", photoURL, userID)
+	log.Printf("Updating photo for user %s to: %s", userID, photoURL)
+
+	result, err := db.c.Exec(
+		"UPDATE users SET photo_url = ? WHERE id = ?",
+		photoURL, userID,
+	)
+	if err != nil {
+		log.Printf("Error updating photo: %v", err)
+		return err
+	}
+
+	rows, _ := result.RowsAffected() // Ignore the error since we don't use it
+	log.Printf("Rows affected by update: %d", rows)
+
+	// Verify the update
+	var savedURL string
+	err = db.c.QueryRow(
+		"SELECT photo_url FROM users WHERE id = ?",
+		userID,
+	).Scan(&savedURL)
+
+	if err != nil {
+		log.Printf("Error verifying update: %v", err)
+	} else {
+		log.Printf("Verified saved photo_url: %s", savedURL)
+	}
+
 	return err
 }

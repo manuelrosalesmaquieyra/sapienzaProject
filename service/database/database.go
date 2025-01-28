@@ -71,6 +71,8 @@ type AppDatabase interface {
 	CreateConversation(participants []string) (string, error)
 
 	CreateMessage(conversationId string, sender string, content string) (string, error)
+
+	GetConversationParticipants(conversationId string) ([]string, error)
 }
 
 type appdbimpl struct {

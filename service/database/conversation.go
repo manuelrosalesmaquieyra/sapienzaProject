@@ -275,12 +275,13 @@ func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, erro
 			return nil, fmt.Errorf("error scanning conversation: %w", err)
 		}
 
-		// Get participants with their usernames
+		// Get participants with their usernames and photos
 		pRows, err := db.c.Query(`
-            SELECT u.username 
+            SELECT u.username, COALESCE(u.photo_url, '') as photo_url
             FROM conversation_participants cp
             JOIN users u ON cp.user_id = u.id
-            WHERE cp.conversation_id = ?`, conv.ID)
+            WHERE cp.conversation_id = ?
+            AND u.username != ?`, conv.ID, username)
 		if err != nil {
 			return nil, fmt.Errorf("error getting participants: %w", err)
 		}
@@ -289,10 +290,14 @@ func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, erro
 		var participants []string
 		for pRows.Next() {
 			var p string
-			if err := pRows.Scan(&p); err != nil {
+			var photoURL string
+			if err := pRows.Scan(&p, &photoURL); err != nil {
 				return nil, fmt.Errorf("error scanning participant: %w", err)
 			}
 			participants = append(participants, p)
+			if photoURL != "" {
+				conv.PhotoURL = photoURL // Store the other user's photo
+			}
 		}
 
 		if err = pRows.Err(); err != nil {
@@ -300,7 +305,6 @@ func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, erro
 		}
 
 		conv.Participants = participants
-		log.Printf("Conversation %s has participants: %v", conv.ID, participants)
 		conversations = append(conversations, conv)
 	}
 
@@ -335,4 +339,28 @@ func (db *appdbimpl) CreateMessage(conversationId string, sender string, content
 	}
 
 	return messageId, nil
+}
+
+func (db *appdbimpl) GetConversationParticipants(conversationId string) ([]string, error) {
+	rows, err := db.c.Query(`
+        SELECT u.username
+        FROM conversation_participants cp
+        JOIN users u ON cp.user_id = u.id
+        WHERE cp.conversation_id = ?
+    `, conversationId)
+	if err != nil {
+		return nil, fmt.Errorf("error getting participants: %w", err)
+	}
+	defer rows.Close()
+
+	var participants []string
+	for rows.Next() {
+		var username string
+		if err := rows.Scan(&username); err != nil {
+			return nil, fmt.Errorf("error scanning participant: %w", err)
+		}
+		participants = append(participants, username)
+	}
+
+	return participants, nil
 }

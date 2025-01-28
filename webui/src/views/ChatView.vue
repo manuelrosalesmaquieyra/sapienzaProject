@@ -10,30 +10,21 @@ const messages = ref([])
 const newMessage = ref('')
 const loading = ref(false)
 const error = ref('')
-const conversationDetails = computed(() => route.params.conversation || { participants: [] })
-
-// Get conversation ID from route
+const conversationDetails = ref({ participants: [] })
 const conversationId = ref(route.params.conversation_id)
-
-// Add this computed property
 const currentUsername = computed(() => localStorage.getItem('username'))
-
-// Add ref for messages container
 const messagesContainer = ref(null)
 
-// Add this computed property to get the other participant's name
 const otherParticipant = computed(() => {
     const participants = conversationDetails.value?.participants || []
     return participants.find(p => p !== currentUsername.value) || 'Unknown User'
 })
 
-// Fetch messages
 const fetchMessages = async () => {
     try {
         loading.value = true
         const data = await api.getConversationMessages(conversationId.value)
         messages.value = data.messages
-        // Add this debug log
         console.log('Messages with reactions:', messages.value)
     } catch (err) {
         error.value = 'Failed to load messages'
@@ -43,13 +34,11 @@ const fetchMessages = async () => {
     }
 }
 
-// Send message
 const sendMessage = async () => {
     if (!newMessage.value.trim()) return
     
     try {
         const response = await api.sendMessage(conversationId.value, newMessage.value)
-        // Add new message to the list instead of fetching all messages
         messages.value.push({
             id: response.message_id,
             conversation_id: conversationId.value,
@@ -59,7 +48,6 @@ const sendMessage = async () => {
         })
         newMessage.value = ''
         
-        // Scroll to bottom after new message
         await nextTick(() => {
             const container = document.querySelector('.messages-area')
             if (container) {
@@ -77,7 +65,6 @@ const deleteMessage = async (messageId) => {
     
     try {
         await api.deleteMessage(conversationId.value, messageId)
-        // Remove message from local state
         messages.value = messages.value.filter(m => m.message_id !== messageId)
     } catch (err) {
         error.value = 'Failed to delete message'
@@ -89,7 +76,6 @@ const showForwardModal = ref(false)
 const messageToForward = ref(null)
 const conversations = ref([])
 
-// Get conversation list
 const fetchConversations = async () => {
   try {
     const response = await api.getConversations(currentUsername.value)
@@ -117,21 +103,17 @@ const confirmForward = async (targetConversationId) => {
     showForwardModal.value = false
     messageToForward.value = null
     
-    // If forwarding to current conversation, refresh messages
     if (targetConversationId === conversationId.value) {
-      await fetchMessages()  // Refresh the messages list
+      await fetchMessages()
     }
   } catch (err) {
     console.error('Error forwarding message:', err)
   }
 }
 
-// Revert back to original reactions
 const reactions = [':)', ':(', ':D', ':P', '<3']
 
-// Add click away event listener
 const closeReactionModal = (event) => {
-  // Check if click is outside the reaction modal
   if (showReactionModal.value && 
       !event.target.closest('.reaction-modal') && 
       !event.target.closest('.react-btn')) {
@@ -140,7 +122,6 @@ const closeReactionModal = (event) => {
   }
 }
 
-// Add method to delete reaction
 const handleReactionDelete = (messageId, reaction) => {
   console.log('Button clicked!', {
     messageId,
@@ -181,7 +162,6 @@ const addReaction = async (messageId, emoji) => {
     showReactionModal.value = false
     selectedMessage.value = null
     
-    // Update messages but maintain scroll position
     await fetchMessages()
     await nextTick(() => {
       if (container) {
@@ -200,7 +180,6 @@ const handleReactionClick = async (messageId, reaction) => {
   try {
     await api.deleteReaction(messageId, conversationId.value)
     
-    // Update messages but maintain scroll position
     await fetchMessages()
     await nextTick(() => {
       if (container) {
@@ -224,7 +203,6 @@ const getModalStyle = (msg) => {
   const topSpace = rect.top - containerRect.top
   const bottomSpace = containerRect.bottom - rect.bottom
 
-  // If there's more space at the bottom, show below
   if (bottomSpace > topSpace) {
     return {
       top: '100%',
@@ -232,7 +210,6 @@ const getModalStyle = (msg) => {
       marginTop: '8px'
     }
   }
-  // Otherwise show above
   return {
     bottom: '100%',
     top: 'auto',
@@ -240,15 +217,24 @@ const getModalStyle = (msg) => {
   }
 }
 
+const fetchConversationDetails = async () => {
+    try {
+        const data = await api.getConversationDetails(conversationId.value)
+        conversationDetails.value = data
+        console.log('Conversation details:', data)
+    } catch (err) {
+        console.error('Error fetching conversation details:', err)
+    }
+}
+
 onMounted(() => {
+    fetchConversationDetails()
     fetchMessages()
     document.addEventListener('click', closeReactionModal)
-    // Add this debug log
     console.log('Current username:', currentUsername.value)
 })
 
 onUnmounted(() => {
-    // Clean up listener
     document.removeEventListener('click', closeReactionModal)
 })
 </script>
@@ -256,105 +242,104 @@ onUnmounted(() => {
 <template>
   <MainLayout>
     <div class="chat-container">
-      <!-- Chat Header -->
-      <div class="chat-header">
-        <button @click="router.push('/home')" class="back-btn">
-          ← Back
-        </button>
-        <h2>Chat with {{ otherParticipant }}</h2>
-      </div>
-
-      <!-- Messages Area -->
-      <div class="messages-area" ref="messagesContainer">
-        <div v-if="loading" class="loading">
-          Loading messages...
-        </div>
-        
-        <div v-else-if="error" class="error-message">
-          {{ error }}
-        </div>
-        
-        <template v-else>
-          <div v-for="msg in messages" 
-               :key="msg.message_id" 
-               :class="['message', msg.sender === currentUsername ? 'sent' : 'received']"
-               style="position: relative;">
-            <div class="message-sender">{{ msg.sender }}</div>
-            <div class="message-content">
-              {{ msg.content }}
-              <!-- Show reactions -->
-              <div v-if="msg.reactions && msg.reactions.length > 0" class="message-reaction">
-                <span class="reaction-label">Reaction:</span>
-                <template v-for="reaction in msg.reactions" :key="`${msg.message_id}-${reaction.user_id}`">
-                  <div 
-                    class="reaction-emoji"
-                    @click="handleReactionClick(msg.message_id, reaction)"
-                  >
-                    {{ reaction.reaction }}
-                  </div>
-                </template>
-              </div>
-              <div class="message-actions">
-                <button v-if="msg.sender === currentUsername" 
-                        class="action-btn delete-btn"
-                        @click="deleteMessage(msg.message_id)">
-                  🗑️
-                </button>
-                <button class="action-btn forward-btn"
-                        @click="forwardMessage(msg)">
-                  ➡️
-                </button>
-                <button class="action-btn react-btn"
-                        @click="showReactions(msg)">
-                  😊
-                </button>
-              </div>
-            </div>
-            <div class="message-time">{{ new Date(msg.timestamp).toLocaleTimeString() }}</div>
-            <!-- Reaction Modal -->
-            <div v-if="showReactionModal && selectedMessage === msg.message_id" 
-                 class="reaction-modal"
-                 :class="{ 'sent-modal': msg.sender === currentUsername }"
-                 :style="getModalStyle(msg)">
-              <div class="reaction-list">
-                <button v-for="emoji in reactions"
-                        :key="emoji"
-                        class="reaction-btn"
-                        @click="addReaction(msg.message_id, emoji)">
-                  {{ emoji }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </template>
-      </div>
-
-      <!-- Message Input -->
-      <div class="message-input">
-        <input 
-          v-model="newMessage"
-          @keyup.enter="sendMessage"
-          type="text"
-          placeholder="Type a message..."
-        >
-        <button @click="sendMessage" :disabled="!newMessage.trim()">
-          Send
+      <div class="chat-sidebar">
+        <button @click="router.push('/home')" class="back-btn" title="Back to Chats">
+          <span class="arrow">←</span>
+          <span class="text">Back</span>
         </button>
       </div>
+      
+      <div class="chat-main">
+        <div class="chat-header">
+          <h2>{{ otherParticipant }}</h2>
+        </div>
 
-      <!-- Forward Modal -->
-      <div v-if="showForwardModal" class="modal">
-        <div class="modal-content">
-          <h3>Forward Message</h3>
-          <div class="conversation-list">
-            <div v-for="conv in conversations" 
-                 :key="conv.conversation_id"
-                 class="conversation-item"
-                 @click="confirmForward(conv.conversation_id)">
-              {{ getConversationName(conv) }}
-            </div>
+        <div class="messages-area" ref="messagesContainer">
+          <div v-if="loading" class="loading">
+            Loading messages...
           </div>
-          <button class="cancel-btn" @click="showForwardModal = false">Cancel</button>
+          
+          <div v-else-if="error" class="error-message">
+            {{ error }}
+          </div>
+          
+          <template v-else>
+            <div v-for="msg in messages" 
+                 :key="msg.message_id" 
+                 :class="['message', msg.sender === currentUsername ? 'sent' : 'received']"
+                 style="position: relative;">
+              <div class="message-content">
+                {{ msg.content }}
+                <div v-if="msg.reactions && msg.reactions.length > 0" class="message-reaction">
+                  <span class="reaction-label">Reaction:</span>
+                  <template v-for="reaction in msg.reactions" :key="`${msg.message_id}-${reaction.user_id}`">
+                    <div 
+                      class="reaction-emoji"
+                      @click="handleReactionClick(msg.message_id, reaction)"
+                    >
+                      {{ reaction.reaction }}
+                    </div>
+                  </template>
+                </div>
+                <div class="message-actions">
+                  <button v-if="msg.sender === currentUsername" 
+                          class="action-btn delete-btn"
+                          @click="deleteMessage(msg.message_id)">
+                    🗑️
+                  </button>
+                  <button class="action-btn forward-btn"
+                          @click="forwardMessage(msg)">
+                    ➡️
+                  </button>
+                  <button class="action-btn react-btn"
+                          @click="showReactions(msg)">
+                    😊
+                  </button>
+                </div>
+              </div>
+              <div class="message-time">{{ new Date(msg.timestamp).toLocaleTimeString() }}</div>
+              <div v-if="showReactionModal && selectedMessage === msg.message_id" 
+                   class="reaction-modal"
+                   :class="{ 'sent-modal': msg.sender === currentUsername }"
+                   :style="getModalStyle(msg)">
+                <div class="reaction-list">
+                  <button v-for="emoji in reactions"
+                          :key="emoji"
+                          class="reaction-btn"
+                          @click="addReaction(msg.message_id, emoji)">
+                    {{ emoji }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <div class="message-input">
+          <input 
+            v-model="newMessage"
+            @keyup.enter="sendMessage"
+            type="text"
+            placeholder="Type a message..."
+          >
+          <button @click="sendMessage" :disabled="!newMessage.trim()">
+            Send
+          </button>
+        </div>
+
+        <div v-if="showForwardModal" class="modal">
+          <div class="modal-content">
+            <h3>Forward Message</h3>
+            <div class="conversation-list">
+              <div v-for="conv in conversations" 
+                   :key="conv.conversation_id"
+                   class="conversation-item"
+                   @click="confirmForward(conv.conversation_id)">
+                {{ getConversationName(conv) }}
+              </div>
+            </div>
+            <button class="cancel-btn" @click="showForwardModal = false">Cancel</button>
+          </div>
         </div>
       </div>
     </div>
@@ -364,27 +349,67 @@ onUnmounted(() => {
 <style scoped>
 .chat-container {
   display: flex;
-  flex-direction: column;
-  height: calc(100vh - 60px);
-  max-width: 800px;
+  min-height: calc(100vh - 50px);
+  max-width: 1400px;
   margin: 0 auto;
+  gap: 1rem;
+  padding: 0.5rem;
+  position: fixed;
+  top: 50px;
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
-.chat-header {
-  padding: 1rem;
-  background: white;
-  border-bottom: 1px solid #eee;
+.chat-sidebar {
+  width: 150px;
+  padding-right: 0.5rem;
+  border-right: 1px solid #eee;
+}
+
+.chat-main {
+  flex: 1;
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  min-width: 0;
+  margin-right: 0.5rem;
+  overflow: hidden;
 }
 
 .back-btn {
+  width: auto;
+  min-width: 80px;
+  height: 40px;
   padding: 0.5rem 1rem;
   border: none;
   background: #f5f5f5;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 0.5rem;
+}
+
+.back-btn .arrow {
+  font-size: 1.2rem;
+}
+
+.back-btn:hover {
+  background: #e9ecef;
+}
+
+.chat-header {
+  padding: 0.5rem 1rem;
+  background: white;
+  border-bottom: 1px solid #eee;
+}
+
+.chat-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #333;
 }
 
 .messages-area {
@@ -404,7 +429,7 @@ onUnmounted(() => {
 
 .message {
   max-width: 70%;
-  padding: 0.5rem 1rem;
+  padding: 0.8rem 1rem;
   border-radius: 1rem;
   margin: 0.5rem 0;
   position: relative;
@@ -424,14 +449,6 @@ onUnmounted(() => {
   color: black;
   border-bottom-left-radius: 0.25rem;
   margin-right: 30%;
-}
-
-.message.sent .message-sender {
-  text-align: right;
-}
-
-.message.sent .message-time {
-  text-align: right;
 }
 
 .message-time {
@@ -479,12 +496,6 @@ onUnmounted(() => {
   color: #dc3545;
 }
 
-.message-sender {
-    font-size: 0.8rem;
-    opacity: 0.7;
-    margin-bottom: 0.25rem;
-}
-
 .message-content {
     position: relative;
 }
@@ -500,12 +511,10 @@ onUnmounted(() => {
     transition: opacity 0.2s;
 }
 
-/* Position buttons on right for received messages */
 .received .message-actions {
     right: -35px;
 }
 
-/* Position buttons on left for sent messages */
 .sent .message-actions {
     left: -35px;
 }
@@ -631,7 +640,6 @@ onUnmounted(() => {
   right: 0;
 }
 
-/* For modals near the bottom of the screen */
 .message:last-child .reaction-modal {
   top: auto;
   bottom: 0;

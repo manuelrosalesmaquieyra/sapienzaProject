@@ -109,12 +109,6 @@ func (rt *_router) setMyPhoto(w http.ResponseWriter, r *http.Request, ps httprou
 		return
 	}
 
-	// Validate photo URL
-	if requestBody.PhotoURL == "" {
-		http.Error(w, "Photo URL is required", http.StatusBadRequest)
-		return
-	}
-
 	// Get user from token
 	user, err := rt.getUserFromToken(r)
 	if err != nil {
@@ -137,10 +131,7 @@ func (rt *_router) setMyPhoto(w http.ResponseWriter, r *http.Request, ps httprou
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		http.Error(w, "Error encoding response", http.StatusInternalServerError)
-		return
-	}
+	json.NewEncoder(w).Encode(response)
 }
 
 // getUserConversations maneja GET /users/{username}/conversations
@@ -192,4 +183,37 @@ func (rt *_router) getUserFromToken(r *http.Request) (*database.User, error) {
 		log.Printf("Error getting user by token: %v", err)
 	}
 	return user, err
+}
+
+func (rt *_router) getUser(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	username := ps.ByName("username")
+	if username == "" {
+		http.Error(w, "Username is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get user from token
+	user, err := rt.getUserFromToken(r)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Only return data if the requested username matches the authenticated user
+	if username != user.Username {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Return user data
+	response := struct {
+		Username string `json:"username"`
+		PhotoURL string `json:"photo_url"`
+	}{
+		Username: user.Username,
+		PhotoURL: user.PhotoURL,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }

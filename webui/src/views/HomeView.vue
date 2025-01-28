@@ -109,8 +109,17 @@ const handleNewChat = async () => {
             }
           })"
         >
-          <!-- Placeholder for conversation -->
-          <div class="conv-avatar"></div>
+          <div class="conv-avatar">
+            <img 
+              v-if="conv.photo_url" 
+              :src="conv.photo_url" 
+              alt="Profile photo"
+              class="avatar-img"
+            >
+            <div v-else class="avatar-placeholder">
+              👤
+            </div>
+          </div>
           <div class="conv-info">
             <h3>
               {{ conv.participants.find(p => p !== currentUsername) || 'Unknown User' }}
@@ -200,8 +209,22 @@ const handleNewChat = async () => {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: #ddd;
-  margin-right: 1rem;
+  overflow: hidden;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  font-size: 1.5rem;
+  color: #666;
 }
 
 .conv-info h3 {

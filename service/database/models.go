@@ -12,9 +12,10 @@ type User struct {
 
 type Conversation struct {
 	ID           string    `json:"conversation_id"`
+	Participants []string  `json:"participants"`
 	LastMessage  string    `json:"last_message"`
 	Timestamp    time.Time `json:"timestamp"`
-	Participants []string  `json:"participants"`
+	PhotoURL     string    `json:"photo_url"`
 }
 
 // Reaction representa una reacción a un mensaje

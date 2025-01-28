@@ -94,8 +94,12 @@ export const api = {
         return result;
     },
 
+    getConversationDetails: async (conversationId) => {
+        return apiCall(`/conversations/${conversationId}/details`)
+    },
+
     getConversation: async (conversationId) => {
-        return await apiCall(`/conversations/${conversationId}`)
+        return apiCall(`/conversations/${conversationId}`)
     },
 
     deleteMessage: async (conversationId, messageId) => {
@@ -162,11 +166,31 @@ export const api = {
     },
 
     updateProfilePhoto: async (username, photoUrl) => {
+        const payload = {
+            photo_url: photoUrl === null ? "" : photoUrl  // Convert null to empty string
+        }
+        
         return apiCall(`/users/${username}/photo`, {
             method: 'POST',
-            body: JSON.stringify({
-                photo_url: photoUrl
-            })
+            body: JSON.stringify(payload)
         })
+    },
+
+    async getUserProfile(username) {
+        console.log('Fetching profile for:', username)
+        const response = await fetch(`${API_URL}/users/${username}`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('sessionId')}`,
+            }
+        });
+
+        if (!response.ok) {
+            console.error('Profile fetch failed:', response.status)
+            throw new Error('Failed to fetch user profile');
+        }
+
+        const data = await response.json()
+        console.log('Profile data received:', data)
+        return data
     }
 }
