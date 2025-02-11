@@ -261,8 +261,11 @@ func (rt *_router) getConversationDetails(w http.ResponseWriter, r *http.Request
 
 	// Return conversation details
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"conversation_id": conversationId,
 		"participants":    participants,
-	})
+	}); err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
 }

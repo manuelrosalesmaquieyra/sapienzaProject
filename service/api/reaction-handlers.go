@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -34,7 +34,7 @@ func (rt *_router) addReaction(w http.ResponseWriter, r *http.Request, ps httpro
 		return
 	}
 
-	fmt.Printf("Adding reaction - MessageID: %s, UserID: %s, Reaction: %s\n", messageId, user.ID, requestBody.Reaction)
+	log.Printf("Adding reaction - MessageID: %s, UserID: %s, Reaction: %s", messageId, user.ID, requestBody.Reaction)
 
 	// Añadir reacción
 	err = rt.db.AddReaction(messageId, user.ID, requestBody.Reaction)
@@ -63,12 +63,12 @@ func (rt *_router) removeReaction(w http.ResponseWriter, r *http.Request, ps htt
 		return
 	}
 
-	fmt.Printf("Removing reaction - MessageID: %s, UserID: %s, ConversationID: %s\n", messageId, user.ID, conversationId)
+	log.Printf("Removing reaction - MessageID: %s, UserID: %s, ConversationID: %s", messageId, user.ID, conversationId)
 
 	// Eliminar reacción
 	err = rt.db.RemoveReaction(messageId, user.ID)
 	if err != nil {
-		fmt.Printf("Error removing reaction: %v\n", err)
+		log.Printf("Error removing reaction: %v", err)
 		http.Error(w, "Failed to remove reaction", http.StatusInternalServerError)
 		return
 	}

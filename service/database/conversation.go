@@ -142,10 +142,10 @@ func (db *appdbimpl) SendMessage(conversationID string, senderID string, content
 		return nil, fmt.Errorf("error starting transaction: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
 			log.Printf("error rolling back transaction: %v", err)
 		}
-	}() // Operación en bases de datos que "deshace" una transacción cuando algo sale mal.
+	}()
 
 	// Crear mensaje
 	msg := Message{
@@ -207,7 +207,11 @@ func (db *appdbimpl) CreateConversation(participants []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error starting transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			log.Printf("error rolling back transaction: %v", err)
+		}
+	}()
 
 	// Generate conversation ID
 	conversationID := generateUUID()
@@ -360,6 +364,10 @@ func (db *appdbimpl) GetConversationParticipants(conversationId string) ([]strin
 			return nil, fmt.Errorf("error scanning participant: %w", err)
 		}
 		participants = append(participants, username)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating participants: %w", err)
 	}
 
 	return participants, nil

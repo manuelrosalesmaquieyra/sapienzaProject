@@ -1,6 +1,7 @@
 package database
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -39,7 +40,7 @@ func (db *appdbimpl) CreateGroup(name string, creatorID string) (*Group, error) 
 		return nil, fmt.Errorf("error starting transaction: %w", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
 			log.Printf("error rolling back transaction: %v", err)
 		}
 	}()
