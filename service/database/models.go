@@ -12,10 +12,12 @@ type User struct {
 
 type Conversation struct {
 	ID           string    `json:"conversation_id"`
-	Participants []string  `json:"participants"`
 	LastMessage  string    `json:"last_message"`
 	Timestamp    time.Time `json:"timestamp"`
-	PhotoURL     string    `json:"photo_url"`
+	Participants []string  `json:"participants"`
+	PhotoURL     string    `json:"photo_url,omitempty"`
+	IsGroup      bool      `json:"is_group"`
+	Name         string    `json:"name,omitempty"` // Group name if IsGroup is true
 }
 
 // Reaction representa una reacción a un mensaje
@@ -50,4 +52,12 @@ type GroupMember struct {
 type Session struct {
 	Username   string `json:"username"`
 	Identifier string `json:"session_id"`
+}
+
+type ConversationDetails struct {
+	ID           string   `json:"conversation_id"`
+	Participants []string `json:"participants"`
+	IsGroup      bool     `json:"is_group"`
+	Name         string   `json:"name,omitempty"`
+	PhotoURL     string   `json:"photo_url,omitempty"`
 }

@@ -16,7 +16,7 @@ func (db *appdbimpl) GetMessageByID(messageID string) (*Message, error) {
         WHERE id = ?
     `, messageID).Scan(&msg.ID, &msg.ConversationID, &msg.Sender, &msg.Content, &msg.Time)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.New("message not found")
 	}
 	if err != nil {
@@ -37,10 +37,10 @@ func (db *appdbimpl) DeleteMessage(messageID string) error {
     `, messageID).Scan(&messageOwner)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("message not found")
 		}
-		return fmt.Errorf("error checking message: %v", err)
+		return fmt.Errorf("error checking message: %w", err)
 	}
 
 	// Delete the message
@@ -50,7 +50,7 @@ func (db *appdbimpl) DeleteMessage(messageID string) error {
     `, messageID)
 
 	if err != nil {
-		return fmt.Errorf("error deleting message: %v", err)
+		return fmt.Errorf("error deleting message: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()

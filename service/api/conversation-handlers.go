@@ -229,40 +229,44 @@ func (rt *_router) getConversation(w http.ResponseWriter, r *http.Request, ps ht
 
 func (rt *_router) getConversationDetails(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	conversationId := ps.ByName("conversationId")
-	if conversationId == "" {
-		http.Error(w, "Conversation ID is required", http.StatusBadRequest)
-		return
-	}
+	log.Printf("Getting details for conversation ID: %s", conversationId)
 
 	// Get authenticated user
 	user, err := rt.getUserFromToken(r)
 	if err != nil {
+		log.Printf("Auth error: %v", err)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	log.Printf("Authenticated user: %s", user.Username)
 
 	// Verify user is part of the conversation
 	isParticipant, err := rt.db.IsUserInConversation(user.Username, conversationId)
 	if err != nil {
+		log.Printf("Error checking participation: %v", err)
 		http.Error(w, "Error checking conversation access", http.StatusInternalServerError)
 		return
 	}
 	if !isParticipant {
+		log.Printf("User %s is not a participant in conversation %s", user.Username, conversationId)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Get conversation details including participants
-	participants, err := rt.db.GetConversationParticipants(conversationId)
+	// Get conversation details
+	details, err := rt.db.GetConversationDetails(conversationId)
 	if err != nil {
+		log.Printf("Error getting conversation details: %v", err)
 		http.Error(w, "Failed to get conversation details", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("Retrieved conversation details: %+v", details)
 
 	// Return conversation details
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"conversation_id": conversationId,
-		"participants":    participants,
-	})
+	if err := json.NewEncoder(w).Encode(details); err != nil {
+		log.Printf("Error encoding response: %v", err)
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
 }

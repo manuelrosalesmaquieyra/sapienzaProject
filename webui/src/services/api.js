@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3000'
+const API_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:3000`
 
 async function apiCall(endpoint, options = {}) {
     const sessionId = localStorage.getItem('sessionId')
@@ -61,14 +61,6 @@ export const api = {
         if (!response.ok) throw new Error('Failed to fetch messages')
         const data = await response.json()
         return data
-    },
-
-    // Create group
-    async createGroup(name, members) {
-        return apiCall('/groups', {
-            method: 'POST',
-            body: JSON.stringify({ name, members })
-        })
     },
 
     // Send message
@@ -192,5 +184,43 @@ export const api = {
         const data = await response.json()
         console.log('Profile data received:', data)
         return data
+    },
+    
+    // Create a new group
+    createGroup: async (name, members) => {
+        return apiCall('/groups', {
+            method: 'POST',
+            body: JSON.stringify({
+                name: name,
+                members: members  // Array of usernames
+            })
+        })
+    },
+
+    // Update group name
+    updateGroupName: async (groupId, newName) => {
+        return apiCall(`/groups/${groupId}`, {
+            method: 'POST',
+            body: JSON.stringify({
+                new_name: newName  // Note: it's new_name, not name
+            })
+        })
+    },
+
+    // Update group photo
+    updateGroupPhoto: async (groupId, photoUrl) => {
+        return apiCall(`/groups/${groupId}/photo`, {
+            method: 'POST',
+            body: JSON.stringify({
+                photo_url: photoUrl
+            })
+        })
+    },
+
+    // Leave group
+    leaveGroup: async (groupId) => {
+        return apiCall(`/groups/${groupId}/leave`, {
+            method: 'POST'
+        })
     }
 }

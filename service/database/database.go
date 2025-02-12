@@ -61,7 +61,7 @@ type AppDatabase interface {
 	RemoveReaction(messageID string, userID string) error
 
 	// Group operations
-	CreateGroup(name string, creatorID string) (*Group, error)
+	CreateGroup(name string, creatorID string, members []string) (*Group, error)
 	UpdateGroupName(groupID string, newName string) error
 	UpdateGroupPhoto(groupID string, photoURL string) error
 	LeaveGroup(groupID string, userID string) error
@@ -73,6 +73,8 @@ type AppDatabase interface {
 	CreateMessage(conversationId string, sender string, content string) (string, error)
 
 	GetConversationParticipants(conversationId string) ([]string, error)
+
+	GetConversationDetails(conversationID string) (*ConversationDetails, error)
 }
 
 type appdbimpl struct {

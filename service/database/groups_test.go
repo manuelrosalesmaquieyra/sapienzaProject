@@ -64,7 +64,7 @@ func TestUpdateGroupName(t *testing.T) {
 	db := setupTestDB(t)
 
 	// Crear grupo de prueba
-	group, err := db.CreateGroup("Test Group", "user1")
+	group, err := db.CreateGroup("Test Group", "user1", []string{"user2", "user3"})
 	if err != nil {
 		t.Fatalf("error creating test group: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestUpdateGroupPhoto(t *testing.T) {
 	db := setupTestDB(t)
 
 	// Crear grupo de prueba
-	group, err := db.CreateGroup("Test Group", "user1")
+	group, err := db.CreateGroup("Test Group", "user1", []string{"user2", "user3"})
 	if err != nil {
 		t.Fatalf("error creating test group: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestLeaveGroup(t *testing.T) {
 	db := setupTestDB(t)
 
 	// Crear grupo de prueba
-	group, err := db.CreateGroup("Test Group", "user1")
+	group, err := db.CreateGroup("Test Group", "user1", []string{"user2", "user3"})
 	if err != nil {
 		t.Fatalf("error creating test group: %v", err)
 	}

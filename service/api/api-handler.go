@@ -44,7 +44,7 @@ func (rt *_router) Handler() http.Handler {
 	// rt.router.GET("/context", rt.wrap(rt.getContextReply))
 
 	// Special routes
-	//rt.router.GET("/liveness", rt.liveness)
+	// rt.router.GET("/liveness", rt.liveness)
 
 	// Create CORS handler
 	corsMiddleware := handlers.CORS(
