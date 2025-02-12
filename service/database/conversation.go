@@ -33,8 +33,16 @@ func (db *appdbimpl) conversationExists(conversationID string) (bool, error) {
 
 // GetConversationMessages obtiene los mensajes de una conversación
 func (db *appdbimpl) GetConversationMessages(conversationID string) ([]Message, error) {
-	// Validar que la conversación existe
-	exists, err := db.conversationExists(conversationID)
+	// Check if it's a regular conversation or a group
+	var exists bool
+	err := db.c.QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM conversations WHERE id = ?
+            UNION
+            SELECT 1 FROM groups WHERE id = ?
+        )
+    `, conversationID, conversationID).Scan(&exists)
+
 	if err != nil {
 		return nil, err
 	}
@@ -186,11 +194,20 @@ func (db *appdbimpl) SendMessage(conversationID string, senderID string, content
 func (db *appdbimpl) IsUserInConversation(username string, conversationId string) (bool, error) {
 	var count int
 	err := db.c.QueryRow(`
-        SELECT COUNT(*) 
-        FROM conversation_participants cp
-        JOIN users u ON cp.user_id = u.id
-        WHERE cp.conversation_id = ? AND u.username = ?`,
-		conversationId, username).Scan(&count)
+        SELECT COUNT(*) FROM (
+            -- Check regular conversations
+            SELECT cp.conversation_id
+            FROM conversation_participants cp
+            JOIN users u ON cp.user_id = u.id
+            WHERE cp.conversation_id = ? AND u.username = ?
+            UNION ALL
+            -- Check group conversations
+            SELECT gm.group_id
+            FROM group_members gm
+            JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_id = ? AND u.username = ?
+        )`,
+		conversationId, username, conversationId, username).Scan(&count)
 
 	if err != nil {
 		return false, fmt.Errorf("error checking conversation participant: %w", err)
@@ -259,13 +276,36 @@ func (db *appdbimpl) CreateConversation(participants []string) (string, error) {
 func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, error) {
 	log.Printf("Getting conversations for user: %s", username)
 
-	rows, err := db.c.Query(`
-        SELECT DISTINCT c.id, COALESCE(c.last_message, ''), c.timestamp
+	// First get direct conversations
+	query := `
+        SELECT DISTINCT 
+            c.id, 
+            COALESCE(c.last_message, ''), 
+            c.timestamp,
+            FALSE as is_group,
+            '' as group_name,
+            COALESCE(u2.photo_url, '') as photo_url
         FROM conversations c
         JOIN conversation_participants cp ON c.id = cp.conversation_id
         JOIN users u ON cp.user_id = u.id
+        JOIN conversation_participants cp2 ON c.id = cp2.conversation_id
+        JOIN users u2 ON cp2.user_id = u2.id
+        WHERE u.username = ? AND u2.username != ?
+        UNION ALL
+        SELECT 
+            g.id,
+            '' as last_message,
+            g.timestamp,
+            TRUE as is_group,
+            g.name as group_name,
+            COALESCE(g.photo_url, '') as photo_url
+        FROM groups g
+        JOIN group_members gm ON g.id = gm.group_id
+        JOIN users u ON gm.user_id = u.id
         WHERE u.username = ?
-        ORDER BY c.timestamp DESC`, username)
+        ORDER BY timestamp DESC`
+
+	rows, err := db.c.Query(query, username, username, username)
 	if err != nil {
 		return nil, fmt.Errorf("error getting conversations: %w", err)
 	}
@@ -274,49 +314,67 @@ func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, erro
 	var conversations []Conversation
 	for rows.Next() {
 		var conv Conversation
-		err := rows.Scan(&conv.ID, &conv.LastMessage, &conv.Timestamp)
+		var isGroup bool
+		var groupName string
+		var photoURL string
+		err := rows.Scan(
+			&conv.ID,
+			&conv.LastMessage,
+			&conv.Timestamp,
+			&isGroup,
+			&groupName,
+			&photoURL,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning conversation: %w", err)
 		}
 
-		// Get participants with their usernames and photos
-		pRows, err := db.c.Query(`
-            SELECT u.username, COALESCE(u.photo_url, '') as photo_url
-            FROM conversation_participants cp
-            JOIN users u ON cp.user_id = u.id
-            WHERE cp.conversation_id = ?
-            AND u.username != ?`, conv.ID, username)
-		if err != nil {
-			return nil, fmt.Errorf("error getting participants: %w", err)
-		}
-		defer pRows.Close()
-
-		var participants []string
-		for pRows.Next() {
-			var p string
-			var photoURL string
-			if err := pRows.Scan(&p, &photoURL); err != nil {
-				return nil, fmt.Errorf("error scanning participant: %w", err)
+		conv.IsGroup = isGroup
+		conv.PhotoURL = photoURL
+		if isGroup {
+			conv.Name = groupName
+			// Get group members
+			members, err := db.getGroupMembers(conv.ID)
+			if err != nil {
+				return nil, fmt.Errorf("error getting group members: %w", err)
 			}
-			participants = append(participants, p)
-			if photoURL != "" {
-				conv.PhotoURL = photoURL // Store the other user's photo
+			conv.Participants = members
+		} else {
+			// Get participants for direct conversations
+			participants, err := db.GetConversationParticipants(conv.ID)
+			if err != nil {
+				return nil, fmt.Errorf("error getting participants: %w", err)
 			}
+			conv.Participants = participants
 		}
 
-		if err = pRows.Err(); err != nil {
-			return nil, fmt.Errorf("error iterating participant rows: %w", err)
-		}
-
-		conv.Participants = participants
 		conversations = append(conversations, conv)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
-	}
-
 	return conversations, nil
+}
+
+// Helper function to get group members
+func (db *appdbimpl) getGroupMembers(groupID string) ([]string, error) {
+	rows, err := db.c.Query(`
+        SELECT u.username
+        FROM group_members gm
+        JOIN users u ON gm.user_id = u.id
+        WHERE gm.group_id = ?`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var members []string
+	for rows.Next() {
+		var username string
+		if err := rows.Scan(&username); err != nil {
+			return nil, err
+		}
+		members = append(members, username)
+	}
+	return members, nil
 }
 
 func (db *appdbimpl) CreateMessage(conversationId string, sender string, content string) (string, error) {
@@ -371,4 +429,77 @@ func (db *appdbimpl) GetConversationParticipants(conversationId string) ([]strin
 	}
 
 	return participants, nil
+}
+
+func (db *appdbimpl) GetConversationDetails(conversationID string) (*ConversationDetails, error) {
+	// First check if this is a group
+	var isGroup bool
+	//var groupName string
+	err := db.c.QueryRow(`
+        SELECT EXISTS(
+            SELECT 1 FROM groups WHERE id = ?
+        )`, conversationID).Scan(&isGroup)
+	if err != nil {
+		return nil, fmt.Errorf("error checking if group: %w", err)
+	}
+
+	details := &ConversationDetails{
+		ID:      conversationID,
+		IsGroup: isGroup,
+	}
+
+	if isGroup {
+		// Get group details
+		err = db.c.QueryRow(`
+            SELECT name, COALESCE(photo_url, '') 
+            FROM groups 
+            WHERE id = ?`, conversationID).Scan(&details.Name, &details.PhotoURL)
+		if err != nil {
+			return nil, fmt.Errorf("error getting group details: %w", err)
+		}
+
+		// Get group members
+		rows, err := db.c.Query(`
+            SELECT u.username 
+            FROM group_members gm
+            JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_id = ?`, conversationID)
+		if err != nil {
+			return nil, fmt.Errorf("error getting group members: %w", err)
+		}
+		defer rows.Close()
+
+		var members []string
+		for rows.Next() {
+			var username string
+			if err := rows.Scan(&username); err != nil {
+				return nil, fmt.Errorf("error scanning member: %w", err)
+			}
+			members = append(members, username)
+		}
+		details.Participants = members
+	} else {
+		// Get regular conversation participants
+		rows, err := db.c.Query(`
+            SELECT u.username 
+            FROM conversation_participants cp
+            JOIN users u ON cp.user_id = u.id
+            WHERE cp.conversation_id = ?`, conversationID)
+		if err != nil {
+			return nil, fmt.Errorf("error getting participants: %w", err)
+		}
+		defer rows.Close()
+
+		var participants []string
+		for rows.Next() {
+			var username string
+			if err := rows.Scan(&username); err != nil {
+				return nil, fmt.Errorf("error scanning participant: %w", err)
+			}
+			participants = append(participants, username)
+		}
+		details.Participants = participants
+	}
+
+	return details, nil
 }

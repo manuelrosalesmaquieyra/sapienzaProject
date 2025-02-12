@@ -7,34 +7,55 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-// createGroup maneja POST /groups/
+// createGroup handles POST /groups/
 func (rt *_router) createGroup(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	// Verificar autenticación
+	// Verify authentication
 	user, err := rt.getUserFromToken(r)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Parsear body
+	// Parse request body
 	var requestBody struct {
-		Name string `json:"name"`
+		Name    string   `json:"name"`
+		Members []string `json:"members"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Crear grupo
-	group, err := rt.db.CreateGroup(requestBody.Name, user.ID)
-	if err != nil {
-		http.Error(w, "Failed to create group", http.StatusInternalServerError)
+	// Validate request
+	if requestBody.Name == "" {
+		http.Error(w, "Group name is required", http.StatusBadRequest)
+		return
+	}
+	if len(requestBody.Members) < 2 {
+		http.Error(w, "At least 2 members are required", http.StatusBadRequest)
+		return
+	}
+	if len(requestBody.Members) > 50 {
+		http.Error(w, "Maximum 50 members allowed", http.StatusBadRequest)
 		return
 	}
 
-	// Devolver respuesta
+	// Create group with members
+	group, err := rt.db.CreateGroup(requestBody.Name, user.ID, requestBody.Members)
+	if err != nil {
+		http.Error(w, "Failed to create group: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return response
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(group); err != nil {
+	w.WriteHeader(http.StatusCreated) // 201 Created
+	response := struct {
+		GroupID string `json:"group_id"`
+	}{
+		GroupID: group.ID,
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Error encoding response", http.StatusInternalServerError)
 		return
 	}
@@ -48,26 +69,26 @@ func (rt *_router) updateGroupName(w http.ResponseWriter, r *http.Request, ps ht
 		return
 	}
 
-	// Verificar autenticación
+	// Verify authentication
 	_, err := rt.getUserFromToken(r)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Parsear body
+	// Parse body
 	var requestBody struct {
-		Name string `json:"name"`
+		NewName string `json:"new_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	// Actualizar nombre
-	err = rt.db.UpdateGroupName(groupID, requestBody.Name)
+	// Update name
+	err = rt.db.UpdateGroupName(groupID, requestBody.NewName)
 	if err != nil {
-		http.Error(w, "Failed to update group name", http.StatusInternalServerError)
+		http.Error(w, "Failed to update group name: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

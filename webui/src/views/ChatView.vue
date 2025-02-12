@@ -1,11 +1,12 @@
 <script setup>
-import { ref, onMounted, computed, nextTick, onUnmounted } from 'vue'
+import { ref, onMounted, computed, nextTick, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MainLayout from '../layouts/MainLayout.vue'
 import { api } from '../services/api'
 
 const route = useRoute()
 const router = useRouter()
+const conversation = ref(null)
 const messages = ref([])
 const newMessage = ref('')
 const loading = ref(false)
@@ -16,8 +17,8 @@ const currentUsername = computed(() => localStorage.getItem('username'))
 const messagesContainer = ref(null)
 
 const otherParticipant = computed(() => {
-    const participants = conversationDetails.value?.participants || []
-    return participants.find(p => p !== currentUsername.value) || 'Unknown User'
+    if (!conversation.value?.participants) return ''
+    return conversation.value.participants.find(p => p !== currentUsername.value) || ''
 })
 
 const fetchMessages = async () => {
@@ -219,12 +220,76 @@ const getModalStyle = (msg) => {
 
 const fetchConversationDetails = async () => {
     try {
-        const data = await api.getConversationDetails(conversationId.value)
-        conversationDetails.value = data
-        console.log('Conversation details:', data)
-    } catch (err) {
-        console.error('Error fetching conversation details:', err)
+        const details = await api.getConversationDetails(route.params.conversation_id)
+        conversation.value = details
+        console.log('Conversation loaded:', details)
+    } catch (error) {
+        console.error('Error:', error)
     }
+}
+
+// Add these refs for group management
+const showGroupMenu = ref(false)
+const newGroupName = ref('')
+const newGroupPhoto = ref('')
+
+// Add these methods for group management
+const handleUpdateGroupName = async () => {
+    if (!newGroupName.value.trim()) {
+        alert('Please enter a group name')
+        return
+    }
+    
+    try {
+        await api.updateGroupName(route.params.conversation_id, newGroupName.value)
+        // Refresh conversation details to show new name
+        await fetchConversationDetails()
+        // Clear input and close menu
+        newGroupName.value = ''
+        showGroupMenu.value = false
+    } catch (error) {
+        console.error('Error updating group name:', error)
+        alert('Failed to update group name: ' + error.message)
+    }
+}
+
+const handleUpdateGroupPhoto = async () => {
+    if (!newGroupPhoto.value.trim()) {
+        alert('Please enter a photo URL')
+        return
+    }
+    
+    try {
+        await api.updateGroupPhoto(route.params.conversation_id, newGroupPhoto.value)
+        // Refresh conversation details to show new photo
+        await fetchConversationDetails()
+        // Clear input and close menu
+        newGroupPhoto.value = ''
+        showGroupMenu.value = false
+    } catch (error) {
+        console.error('Error updating group photo:', error)
+        alert('Failed to update group photo: ' + error.message)
+    }
+}
+
+const handleLeaveGroup = async () => {
+    if (!confirm('Are you sure you want to leave this group?')) {
+        return
+    }
+    
+    try {
+        await api.leaveGroup(route.params.conversation_id)
+        // Redirect to home after leaving
+        router.push('/home')
+    } catch (error) {
+        console.error('Error leaving group:', error)
+        alert('Failed to leave group: ' + error.message)
+    }
+}
+
+// Add this function to handle image loading errors
+const handleImageError = (e) => {
+    e.target.style.display = 'none'
 }
 
 onMounted(() => {
@@ -251,7 +316,31 @@ onUnmounted(() => {
       
       <div class="chat-main">
         <div class="chat-header">
-          <h2>{{ otherParticipant }}</h2>
+          <div class="header-info">
+            <div class="header-content">
+              <img v-if="conversation?.photo_url" 
+                   :src="conversation.photo_url" 
+                   class="group-photo"
+                   @error="handleImageError"
+                   alt="Profile photo">
+              <div class="text-content">
+                <h2 v-if="conversation?.is_group">
+                  {{ conversation.name || 'Loading...' }}
+                  <p class="participants">{{ conversation?.participants?.join(', ') }}</p>
+                </h2>
+                <h2 v-else>
+                  {{ otherParticipant }}
+                </h2>
+              </div>
+            </div>
+          </div>
+          <button 
+            v-if="conversation?.is_group" 
+            @click="showGroupMenu = !showGroupMenu"
+            class="group-menu-btn"
+          >
+            ⚙️
+          </button>
         </div>
 
         <div class="messages-area" ref="messagesContainer">
@@ -341,6 +430,29 @@ onUnmounted(() => {
             <button class="cancel-btn" @click="showForwardModal = false">Cancel</button>
           </div>
         </div>
+
+        <!-- Group management menu -->
+        <div v-if="showGroupMenu" class="group-menu">
+            <div class="menu-item">
+                <input v-model="newGroupName" 
+                       placeholder="New group name"
+                       @keyup.enter="handleUpdateGroupName">
+                <button @click="handleUpdateGroupName">Update Name</button>
+            </div>
+
+            <div class="menu-item">
+                <input v-model="newGroupPhoto" 
+                       placeholder="New photo URL"
+                       @keyup.enter="handleUpdateGroupPhoto">
+                <button @click="handleUpdateGroupPhoto">Update Photo</button>
+            </div>
+
+            <div class="menu-item">
+                <button @click="handleLeaveGroup" class="leave-btn">
+                    Leave Group
+                </button>
+            </div>
+        </div>
       </div>
     </div>
   </MainLayout>
@@ -401,15 +513,27 @@ onUnmounted(() => {
 }
 
 .chat-header {
-  padding: 0.5rem 1rem;
-  background: white;
-  border-bottom: 1px solid #eee;
+  padding: 1rem;
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
-.chat-header h2 {
+.header-info {
+  flex: 1;
+}
+
+.header-info h2 {
   margin: 0;
-  font-size: 1.2rem;
-  color: #333;
+  padding: 0;
+}
+
+.participants {
+  margin: 5px 0 0 0;
+  font-size: 0.9rem;
+  color: #666;
 }
 
 .messages-area {
@@ -689,5 +813,62 @@ onUnmounted(() => {
 
 .reaction-button:hover {
   opacity: 0.7;
+}
+
+.group-menu {
+    position: absolute;
+    top: 60px;
+    right: 10px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 100;
+}
+
+.menu-item {
+    margin: 10px 0;
+}
+
+.menu-item input {
+    margin-right: 10px;
+    padding: 4px 8px;
+}
+
+.leave-btn {
+    color: red;
+    border-color: red;
+}
+
+.group-menu-btn {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 5px;
+}
+
+.group-menu-btn:hover {
+    background: #eee;
+    border-radius: 50%;
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.group-photo {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid #ddd;
+}
+
+.text-content {
+    flex: 1;
 }
 </style>

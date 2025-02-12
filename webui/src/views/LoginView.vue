@@ -3,6 +3,9 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import LoginLayout from '../layouts/LoginLayout.vue'
 
+// Get base URL from environment or window location
+const API_URL = import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:3000`
+
 // Input field for username
 const username = ref('')
 // Error message state
@@ -18,8 +21,8 @@ const handleLogin = async () => {
       return
     }
 
-    // Call login API
-    const response = await fetch('http://localhost:3000/session', {
+    // Call login API with dynamic URL
+    const response = await fetch(`${API_URL}/session`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
