@@ -358,6 +358,10 @@ onUnmounted(() => {
                  :class="['message', msg.sender === currentUsername ? 'sent' : 'received']"
                  style="position: relative;">
               <div class="message-content">
+                <div v-if="conversation?.is_group && msg.sender !== currentUsername" 
+                     class="message-sender">
+                  {{ msg.sender }}
+                </div>
                 {{ msg.content }}
                 <div v-if="msg.reactions && msg.reactions.length > 0" class="message-reaction">
                   <span class="reaction-label">Reaction:</span>
@@ -870,5 +874,15 @@ onUnmounted(() => {
 
 .text-content {
     flex: 1;
+}
+
+.message-sender {
+    font-size: 0.8rem;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.sent .message-sender {
+    color: rgba(255, 255, 255, 0.8);
 }
 </style>
