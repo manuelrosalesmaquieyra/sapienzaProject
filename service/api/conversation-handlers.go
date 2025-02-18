@@ -270,3 +270,28 @@ func (rt *_router) getConversationDetails(w http.ResponseWriter, r *http.Request
 		return
 	}
 }
+
+// Add this new handler function
+func (rt *_router) getAllUsers(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	// Get authenticated user
+	_, err := rt.getUserFromToken(r)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Get all users
+	users, err := rt.db.GetAllUsers()
+	if err != nil {
+		log.Printf("Error getting users: %v", err)
+		http.Error(w, "Failed to get users", http.StatusInternalServerError)
+		return
+	}
+
+	// Return users
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(users); err != nil {
+		http.Error(w, "Error encoding response", http.StatusInternalServerError)
+		return
+	}
+}

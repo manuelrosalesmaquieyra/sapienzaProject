@@ -2,8 +2,6 @@ package api
 
 import (
 	"net/http"
-
-	"github.com/gorilla/handlers"
 )
 
 // Handler returns an instance of httprouter.Router that handle APIs registered here
@@ -16,6 +14,8 @@ func (rt *_router) Handler() http.Handler {
 	rt.router.PUT("/users/:username", rt.setMyUserName)
 	rt.router.POST("/users/:username/photo", rt.setMyPhoto)
 	rt.router.GET("/users/:username", rt.getUser)
+	rt.router.GET("/users/:username/exists", rt.checkUserExists)
+	rt.router.GET("/allusers", rt.getAllUsers)
 
 	// Group routes
 	rt.router.POST("/groups", rt.createGroup)
@@ -37,7 +37,12 @@ func (rt *_router) Handler() http.Handler {
 	// Message routes
 	rt.router.POST("/conversations/:conversationId/messages", rt.sendMessage)
 	rt.router.DELETE("/conversations/:conversationId/messages/:messageId", rt.deleteMessage)
-	rt.router.POST("/conversations/:conversationId/messages/:messageId", rt.forwardMessage)
+	rt.router.POST("/conversations/:conversationId/messages/:messageId/forward", rt.forwardMessage)
+	rt.router.POST("/conversations/:conversationId/messages/:messageId/reply", rt.replyToMessage)
+	rt.router.POST("/conversations/:conversationId/image-message", rt.sendImageMessage)
+
+	// Add static file server for uploads
+	rt.router.ServeFiles("/uploads/*filepath", http.Dir("uploads"))
 
 	// Register routes
 	// rt.router.GET("/", rt.getHelloWorld)
@@ -46,14 +51,6 @@ func (rt *_router) Handler() http.Handler {
 	// Special routes
 	// rt.router.GET("/liveness", rt.liveness)
 
-	// Create CORS handler
-	corsMiddleware := handlers.CORS(
-		handlers.AllowedOrigins([]string{"http://localhost:5173"}),
-		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}),
-		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}),
-		handlers.AllowCredentials(),
-	)
-
-	// Apply CORS middleware to router
-	return corsMiddleware(rt.router)
+	// Remove the CORS middleware here and just return the router
+	return rt.router
 }

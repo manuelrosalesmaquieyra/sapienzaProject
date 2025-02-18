@@ -15,18 +15,42 @@ const conversationDetails = ref({ participants: [] })
 const conversationId = ref(route.params.conversation_id)
 const currentUsername = computed(() => localStorage.getItem('username'))
 const messagesContainer = ref(null)
+const isFirstLoad = ref(true)
 
 const otherParticipant = computed(() => {
     if (!conversation.value?.participants) return ''
     return conversation.value.participants.find(p => p !== currentUsername.value) || ''
 })
 
+const scrollToBottom = () => {
+    nextTick(() => {
+        const container = document.querySelector('.messages-area')
+        if (container) {
+            container.scrollTo({
+                top: container.scrollHeight,
+                behavior: isFirstLoad.value ? 'auto' : 'smooth'
+            })
+            isFirstLoad.value = false
+        }
+    })
+}
+
 const fetchMessages = async () => {
     try {
         loading.value = true
         const data = await api.getConversationMessages(conversationId.value)
         messages.value = data.messages
-        console.log('Messages with reactions:', messages.value)
+        
+        data.messages.forEach(msg => {
+            if (msg.reactions && msg.reactions.length > 0) {
+                console.log('Message with reactions:', {
+                    message_id: msg.message_id,
+                    content: msg.content,
+                    reactions: msg.reactions
+                })
+            }
+        })
+        
     } catch (err) {
         error.value = 'Failed to load messages'
         console.error('Error:', err)
@@ -35,31 +59,84 @@ const fetchMessages = async () => {
     }
 }
 
-const sendMessage = async () => {
-    if (!newMessage.value.trim()) return
+const replyingTo = ref(null)
+const imageInput = ref(null)
+
+const handleReply = (message) => {
+    replyingTo.value = message;
+    document.querySelector('.message-input input').focus();
+};
+
+const cancelReply = () => {
+    replyingTo.value = null;
+};
+
+const handleImageUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
     
     try {
-        const response = await api.sendMessage(conversationId.value, newMessage.value)
+        const response = await api.sendImageMessage(conversationId.value, file);
+        messages.value.push({
+            id: response.message_id,
+            conversation_id: conversationId.value,
+            sender: currentUsername.value,
+            image_url: response.image_url,
+            timestamp: new Date()
+        });
+        
+        event.target.value = '';
+        
+        await nextTick(() => {
+            const container = document.querySelector('.messages-area');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
+        });
+    } catch (err) {
+        error.value = 'Failed to send image';
+        console.error('Error:', err);
+    }
+};
+
+const sendMessage = async () => {
+    if (!newMessage.value.trim()) return;
+    
+    try {
+        let response;
+        if (replyingTo.value) {
+            response = await api.replyToMessage(
+                conversationId.value,
+                replyingTo.value.message_id,
+                newMessage.value
+            );
+        } else {
+            response = await api.sendMessage(conversationId.value, newMessage.value);
+        }
+        
         messages.value.push({
             id: response.message_id,
             conversation_id: conversationId.value,
             sender: currentUsername.value,
             content: newMessage.value,
+            reply_to_id: replyingTo.value?.message_id,
             timestamp: new Date()
-        })
-        newMessage.value = ''
+        });
+        
+        newMessage.value = '';
+        replyingTo.value = null;
         
         await nextTick(() => {
-            const container = document.querySelector('.messages-area')
+            const container = document.querySelector('.messages-area');
             if (container) {
-                container.scrollTop = container.scrollHeight
+                container.scrollTop = container.scrollHeight;
             }
-        })
+        });
     } catch (err) {
-        error.value = 'Failed to send message'
-        console.error('Error:', err)
+        error.value = 'Failed to send message';
+        console.error('Error:', err);
     }
-}
+};
 
 const deleteMessage = async (messageId) => {
     if (!confirm('Are you sure you want to delete this message?')) return
@@ -76,40 +153,91 @@ const deleteMessage = async (messageId) => {
 const showForwardModal = ref(false)
 const messageToForward = ref(null)
 const conversations = ref([])
+const availableUsers = ref([])
+const forwardTabActive = ref('chats')
 
-const fetchConversations = async () => {
-  try {
-    const response = await api.getConversations(currentUsername.value)
-    conversations.value = response
-  } catch (err) {
-    console.error('Error fetching conversations:', err)
-  }
+const fetchForwardData = async () => {
+    try {
+        const [convsResponse, usersResponse] = await Promise.all([
+            api.getConversations(currentUsername.value),
+            api.getAllUsers()
+        ])
+        
+        conversations.value = convsResponse
+        availableUsers.value = usersResponse.filter(username => 
+            username !== currentUsername.value
+        )
+        
+        console.log('Available users:', availableUsers.value)
+    } catch (err) {
+        console.error('Error fetching forward data:', err)
+        error.value = 'Failed to load users and conversations'
+    }
 }
 
 const forwardMessage = async (message) => {
-  messageToForward.value = message
-  await fetchConversations()
-  showForwardModal.value = true
+    messageToForward.value = message
+    await fetchForwardData()
+    showForwardModal.value = true
+}
+
+const forwardToUser = async (username) => {
+    try {
+        console.log('Starting forward to user:', username);
+        
+        // First create a new conversation
+        const conversationResponse = await api.createConversation(username);
+        console.log('Created conversation:', conversationResponse);
+        
+        if (!conversationResponse || !conversationResponse.conversation_id) {
+            throw new Error('Failed to create conversation');
+        }
+        
+        // Then forward the message
+        const response = await api.forwardMessage(
+            conversationResponse.conversation_id,
+            messageToForward.value.message_id || messageToForward.value.id
+        );
+        console.log('Forward response:', response);
+        
+        showForwardModal.value = false;
+        messageToForward.value = null;
+        
+    } catch (err) {
+        console.error('Error forwarding to user:', err);
+        error.value = err.message || 'Failed to forward message';
+    }
+};
+
+const confirmForward = async (targetConversationId) => {
+    try {
+        console.log('Confirming forward:', {
+            targetConversationId,
+            messageToForward: messageToForward.value
+        })
+        
+        const response = await api.forwardMessage(
+            targetConversationId, 
+            messageToForward.value.message_id || messageToForward.value.id
+        )
+        console.log('Forward response:', response)
+        
+        showForwardModal.value = false
+        messageToForward.value = null
+        
+        if (targetConversationId === conversationId.value) {
+            await fetchMessages()
+        }
+    } catch (err) {
+        console.error('Error forwarding message:', err)
+        error.value = 'Failed to forward message'
+    }
 }
 
 const getConversationName = (conv) => {
   return conv.participants
     .filter(p => p !== currentUsername.value)
     .join(', ')
-}
-
-const confirmForward = async (targetConversationId) => {
-  try {
-    await api.forwardMessage(targetConversationId, messageToForward.value.message_id)
-    showForwardModal.value = false
-    messageToForward.value = null
-    
-    if (targetConversationId === conversationId.value) {
-      await fetchMessages()
-    }
-  } catch (err) {
-    console.error('Error forwarding message:', err)
-  }
 }
 
 const reactions = [':)', ':(', ':D', ':P', '<3']
@@ -228,12 +356,11 @@ const fetchConversationDetails = async () => {
     }
 }
 
-// Add these refs for group management
 const showGroupMenu = ref(false)
 const newGroupName = ref('')
 const newGroupPhoto = ref('')
+const groupPhotoInput = ref(null)
 
-// Add these methods for group management
 const handleUpdateGroupName = async () => {
     if (!newGroupName.value.trim()) {
         alert('Please enter a group name')
@@ -242,9 +369,7 @@ const handleUpdateGroupName = async () => {
     
     try {
         await api.updateGroupName(route.params.conversation_id, newGroupName.value)
-        // Refresh conversation details to show new name
         await fetchConversationDetails()
-        // Clear input and close menu
         newGroupName.value = ''
         showGroupMenu.value = false
     } catch (error) {
@@ -261,9 +386,7 @@ const handleUpdateGroupPhoto = async () => {
     
     try {
         await api.updateGroupPhoto(route.params.conversation_id, newGroupPhoto.value)
-        // Refresh conversation details to show new photo
         await fetchConversationDetails()
-        // Clear input and close menu
         newGroupPhoto.value = ''
         showGroupMenu.value = false
     } catch (error) {
@@ -272,6 +395,25 @@ const handleUpdateGroupPhoto = async () => {
     }
 }
 
+const handleGroupPhotoUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+    }
+    
+    try {
+        await api.updateGroupPhoto(conversationId.value, file);
+        await fetchConversationDetails();
+        showGroupMenu.value = false;
+    } catch (error) {
+        console.error('Error updating group photo:', error);
+        alert('Failed to update group photo: ' + error.message);
+    }
+};
+
 const handleLeaveGroup = async () => {
     if (!confirm('Are you sure you want to leave this group?')) {
         return
@@ -279,7 +421,6 @@ const handleLeaveGroup = async () => {
     
     try {
         await api.leaveGroup(route.params.conversation_id)
-        // Redirect to home after leaving
         router.push('/home')
     } catch (error) {
         console.error('Error leaving group:', error)
@@ -287,10 +428,15 @@ const handleLeaveGroup = async () => {
     }
 }
 
-// Add this function to handle image loading errors
 const handleImageError = (e) => {
     e.target.style.display = 'none'
 }
+
+watch(messages, () => {
+    if (messages.value.length > 0) {
+        scrollToBottom()
+    }
+}, { immediate: true })
 
 onMounted(() => {
     fetchConversationDetails()
@@ -334,13 +480,46 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
-          <button 
-            v-if="conversation?.is_group" 
-            @click="showGroupMenu = !showGroupMenu"
-            class="group-menu-btn"
-          >
-            ⚙️
-          </button>
+          <div class="menu-container">
+            <button 
+                v-if="conversation?.is_group" 
+                @click="showGroupMenu = !showGroupMenu"
+                class="group-menu-btn"
+            >
+                ⚙️
+            </button>
+            
+            <!-- Group Menu Dropdown -->
+            <div v-if="showGroupMenu" class="group-menu">
+                <div class="menu-item">
+                    <input 
+                        v-model="newGroupName" 
+                        placeholder="New group name"
+                        @keyup.enter="handleUpdateGroupName"
+                    >
+                    <button @click="handleUpdateGroupName">Update Name</button>
+                </div>
+
+                <div class="menu-item">
+                    <input 
+                        type="file"
+                        accept="image/*"
+                        @change="handleGroupPhotoUpload"
+                        ref="groupPhotoInput"
+                        style="display: none"
+                    >
+                    <button @click="$refs.groupPhotoInput.click()" class="photo-btn">
+                        Change Photo
+                    </button>
+                </div>
+
+                <div class="menu-item">
+                    <button @click="handleLeaveGroup" class="leave-btn">
+                        Leave Group
+                    </button>
+                </div>
+            </div>
+          </div>
         </div>
 
         <div class="messages-area" ref="messagesContainer">
@@ -356,21 +535,34 @@ onUnmounted(() => {
             <div v-for="msg in messages" 
                  :key="msg.message_id" 
                  :class="['message', msg.sender === currentUsername ? 'sent' : 'received']"
+                 :data-message-id="msg.message_id"
                  style="position: relative;">
               <div class="message-content">
                 <div v-if="conversation?.is_group && msg.sender !== currentUsername" 
                      class="message-sender">
                   {{ msg.sender }}
                 </div>
-                {{ msg.content }}
+                
+                <div v-if="msg.reply_to_id" class="reply-info">
+                  <div class="reply-sender">
+                    {{ messages.find(m => m.message_id === msg.reply_to_id)?.sender || 'Unknown' }}
+                  </div>
+                  <div class="replied-content">
+                    {{ messages.find(m => m.message_id === msg.reply_to_id)?.content || 
+                       (messages.find(m => m.message_id === msg.reply_to_id)?.image_url ? '📷 Photo' : 'Message not found') }}
+                  </div>
+                </div>
+                <div v-if="msg.image_url" class="message-image">
+                  <img :src="msg.image_url" alt="Sent image" @error="handleImageError">
+                </div>
+                <div v-else class="message-text">{{ msg.content }}</div>
                 <div v-if="msg.reactions && msg.reactions.length > 0" class="message-reaction">
-                  <span class="reaction-label">Reaction:</span>
                   <template v-for="reaction in msg.reactions" :key="`${msg.message_id}-${reaction.user_id}`">
                     <div 
                       class="reaction-emoji"
                       @click="handleReactionClick(msg.message_id, reaction)"
                     >
-                      {{ reaction.reaction }}
+                      {{ reaction.reaction }} by {{ reaction.user_id }}
                     </div>
                   </template>
                 </div>
@@ -387,6 +579,10 @@ onUnmounted(() => {
                   <button class="action-btn react-btn"
                           @click="showReactions(msg)">
                     😊
+                  </button>
+                  <button class="action-btn reply-btn"
+                          @click="handleReply(msg)">
+                    ↩️
                   </button>
                 </div>
               </div>
@@ -409,11 +605,20 @@ onUnmounted(() => {
         </div>
 
         <div class="message-input">
+          <div v-if="replyingTo" class="reply-preview">
+            <div class="reply-content">
+                Replying to: {{ replyingTo.content }}
+            </div>
+            <button class="cancel-reply" @click="cancelReply">×</button>
+          </div>
+          <button class="attach-btn" @click="$refs.imageInput.click()">
+            📎
+          </button>
           <input 
             v-model="newMessage"
             @keyup.enter="sendMessage"
             type="text"
-            placeholder="Type a message..."
+            :placeholder="replyingTo ? 'Type your reply...' : 'Type a message...'"
           >
           <button @click="sendMessage" :disabled="!newMessage.trim()">
             Send
@@ -423,40 +628,59 @@ onUnmounted(() => {
         <div v-if="showForwardModal" class="modal">
           <div class="modal-content">
             <h3>Forward Message</h3>
-            <div class="conversation-list">
-              <div v-for="conv in conversations" 
-                   :key="conv.conversation_id"
-                   class="conversation-item"
-                   @click="confirmForward(conv.conversation_id)">
-                {{ getConversationName(conv) }}
-              </div>
+            
+            <!-- Tabs -->
+            <div class="forward-tabs">
+                <button 
+                    :class="['tab-btn', { active: forwardTabActive === 'chats' }]"
+                    @click="forwardTabActive = 'chats'"
+                >
+                    Existing Chats
+                </button>
+                <button 
+                    :class="['tab-btn', { active: forwardTabActive === 'users' }]"
+                    @click="forwardTabActive = 'users'"
+                >
+                    All Users
+                </button>
             </div>
+
+            <!-- Content -->
+            <div v-if="forwardTabActive === 'chats'" class="conversation-list">
+                <div v-for="conv in conversations" 
+                     :key="conv.conversation_id"
+                     class="conversation-item"
+                     @click="confirmForward(conv.conversation_id)">
+                    {{ getConversationName(conv) }}
+                </div>
+                <div v-if="conversations.length === 0" class="empty-state">
+                    No existing chats
+                </div>
+            </div>
+
+            <div v-else class="users-list">
+                <div v-for="username in availableUsers" 
+                     :key="username"
+                     class="user-item"
+                     @click="forwardToUser(username)">
+                    {{ username }}
+                </div>
+                <div v-if="availableUsers.length === 0" class="empty-state">
+                    No other users found
+                </div>
+            </div>
+
             <button class="cancel-btn" @click="showForwardModal = false">Cancel</button>
           </div>
         </div>
 
-        <!-- Group management menu -->
-        <div v-if="showGroupMenu" class="group-menu">
-            <div class="menu-item">
-                <input v-model="newGroupName" 
-                       placeholder="New group name"
-                       @keyup.enter="handleUpdateGroupName">
-                <button @click="handleUpdateGroupName">Update Name</button>
-            </div>
-
-            <div class="menu-item">
-                <input v-model="newGroupPhoto" 
-                       placeholder="New photo URL"
-                       @keyup.enter="handleUpdateGroupPhoto">
-                <button @click="handleUpdateGroupPhoto">Update Photo</button>
-            </div>
-
-            <div class="menu-item">
-                <button @click="handleLeaveGroup" class="leave-btn">
-                    Leave Group
-                </button>
-            </div>
-        </div>
+        <input
+            type="file"
+            ref="imageInput"
+            accept="image/*"
+            style="display: none"
+            @change="handleImageUpload"
+        >
       </div>
     </div>
   </MainLayout>
@@ -637,14 +861,18 @@ onUnmounted(() => {
     gap: 4px;
     opacity: 0;
     transition: opacity 0.2s;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 4px;
+    border-radius: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .received .message-actions {
-    right: -35px;
+    right: -65px;
 }
 
 .sent .message-actions {
-    left: -35px;
+    left: -65px;
 }
 
 .message:hover .message-actions {
@@ -655,12 +883,14 @@ onUnmounted(() => {
     background: none;
     border: none;
     cursor: pointer;
-    padding: 4px;
+    padding: 6px;
     font-size: 16px;
+    border-radius: 50%;
+    transition: background-color 0.2s;
 }
 
 .action-btn:hover {
-    opacity: 0.7;
+    background: rgba(0, 0, 0, 0.1);
 }
 
 .modal {
@@ -725,52 +955,15 @@ onUnmounted(() => {
 
 .reaction-emoji {
   display: inline-block;
-  padding: 2px 6px;
+  padding: 4px 8px;
   margin: 0 2px;
   font-family: monospace;
   border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
-.my-reaction {
-  display: inline-block;
-  padding: 2px 6px;
-  margin: 0 2px;
-  cursor: pointer;
-  background-color: rgba(0,0,0,0.1);
-  border-radius: 4px;
-}
-
-.sent .my-reaction {
-  background-color: rgba(255,255,255,0.2);
-}
-
-.clickable {
-  cursor: pointer;
-}
-
-.sent .message-reaction {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.reaction-modal {
-  position: absolute;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  padding: 8px;
-  z-index: 100;
-  width: max-content;
-  left: 0;
-}
-
-.sent-modal {
-  left: auto;
-  right: 0;
-}
-
-.message:last-child .reaction-modal {
-  top: auto;
-  bottom: 0;
+.sent .reaction-emoji {
+  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .reaction-list {
@@ -841,8 +1034,19 @@ onUnmounted(() => {
 }
 
 .leave-btn {
-    color: red;
-    border-color: red;
+    width: 100%;
+    padding: 8px;
+    background: #fff;
+    color: #dc3545;
+    border: 1px solid #dc3545;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.leave-btn:hover {
+    background: #dc3545;
+    color: white;
 }
 
 .group-menu-btn {
@@ -878,11 +1082,213 @@ onUnmounted(() => {
 
 .message-sender {
     font-size: 0.8rem;
-    color: #666;
+    font-weight: 600;
+    color: #0d6efd;
     margin-bottom: 4px;
 }
 
 .sent .message-sender {
     color: rgba(255, 255, 255, 0.8);
+}
+
+.reply-preview {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-left: 4px solid #0d6efd;
+    margin-bottom: 8px;
+}
+
+.reply-content {
+    flex: 1;
+}
+
+.reply-content-sender {
+    font-weight: 600;
+    color: #0d6efd;
+    margin-bottom: 2px;
+}
+
+.reply-content-text {
+    color: #666;
+    font-size: 0.9em;
+}
+
+.cancel-reply {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 0 8px;
+}
+
+.cancel-reply:hover {
+    color: #dc3545;
+}
+
+.reply-info {
+    background: rgba(0, 0, 0, 0.04);
+    border-left: 4px solid #0d6efd;
+    padding: 4px 8px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.sent .reply-info {
+    background: rgba(255, 255, 255, 0.1);
+    border-left: 4px solid rgba(255, 255, 255, 0.5);
+}
+
+.reply-sender {
+    font-weight: 600;
+    color: #0d6efd;
+    margin-bottom: 2px;
+}
+
+.sent .reply-sender {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.replied-content {
+    color: #666;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sent .replied-content {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.message-image img {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 4px;
+}
+
+.attach-btn {
+    background: none;
+    border: none;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 8px;
+}
+
+.menu-container {
+    position: relative;
+}
+
+.group-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 1000;
+    min-width: 200px;
+}
+
+.menu-item {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.menu-item input {
+    flex: 1;
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.menu-item button {
+    padding: 4px 8px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.menu-item button:hover {
+    background: #0056b3;
+}
+
+.photo-btn {
+    width: 100%;
+    padding: 8px;
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.photo-btn:hover {
+    background: #218838;
+}
+
+.leave-btn {
+    width: 100%;
+    padding: 8px;
+    background: #fff;
+    color: #dc3545;
+    border: 1px solid #dc3545;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.leave-btn:hover {
+    background: #dc3545;
+    color: white;
+}
+
+.forward-tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.5rem;
+}
+
+.forward-tabs .tab-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: #f5f5f5;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.forward-tabs .tab-btn.active {
+    background: #0d6efd;
+    color: white;
+}
+
+.users-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.user-item {
+    padding: 10px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+}
+
+.user-item:hover {
+    background: #f5f5f5;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 1rem;
+    color: #666;
 }
 </style>

@@ -63,29 +63,93 @@ func (db *appdbimpl) DeleteMessage(messageID string) error {
 
 // ForwardMessage reenvía un mensaje a otra conversación
 func (db *appdbimpl) ForwardMessage(messageID, newConversationID, senderID string) (*Message, error) {
-	// Obtener el mensaje original
-	originalMsg, err := db.GetMessageByID(messageID)
+	// Get the original message with both content and image_url
+	var originalMsg Message
+	err := db.c.QueryRow(`
+        SELECT content, image_url
+        FROM messages
+        WHERE id = ?
+    `, messageID).Scan(&originalMsg.Content, &originalMsg.ImageURL)
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error getting original message: %w", err)
 	}
 
-	// Crear un nuevo mensaje en la nueva conversación
+	// Create new message
 	newMsg := Message{
 		ID:             generateUUID(),
 		ConversationID: newConversationID,
 		Sender:         senderID,
 		Content:        originalMsg.Content,
+		ImageURL:       originalMsg.ImageURL,
 		Time:           time.Now(),
 	}
 
+	// Insert the forwarded message
 	_, err = db.c.Exec(`
-        INSERT INTO messages (id, conversation_id, sender, content, timestamp)
-        VALUES (?, ?, ?, ?, ?)
-    `, newMsg.ID, newMsg.ConversationID, newMsg.Sender, newMsg.Content, newMsg.Time)
+        INSERT INTO messages (id, conversation_id, sender, content, image_url, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `, newMsg.ID, newMsg.ConversationID, newMsg.Sender, newMsg.Content, newMsg.ImageURL, newMsg.Time)
 
 	if err != nil {
 		return nil, fmt.Errorf("error forwarding message: %w", err)
 	}
 
+	// Update conversation's last message
+	var lastMessage string
+	if newMsg.Content.Valid {
+		lastMessage = newMsg.Content.String
+	} else if newMsg.ImageURL.Valid {
+		lastMessage = "[Image]"
+	}
+
+	_, err = db.c.Exec(`
+        UPDATE conversations 
+        SET last_message = ?, timestamp = ?
+        WHERE id = ?
+    `, lastMessage, newMsg.Time, newConversationID)
+
+	if err != nil {
+		return nil, fmt.Errorf("error updating conversation: %w", err)
+	}
+
+	// Set the string fields for JSON
+	if newMsg.Content.Valid {
+		newMsg.ContentStr = newMsg.Content.String
+	}
+	if newMsg.ImageURL.Valid {
+		newMsg.ImageURLStr = newMsg.ImageURL.String
+	}
+
 	return &newMsg, nil
+}
+
+func (db *appdbimpl) CreateReplyMessage(conversationID, sender, content, replyToID string) (string, error) {
+	messageID := generateUUID()
+
+	_, err := db.c.Exec(`
+        INSERT INTO messages (id, conversation_id, sender, content, reply_to_id, timestamp)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+    `, messageID, conversationID, sender, content, replyToID)
+
+	if err != nil {
+		return "", fmt.Errorf("error creating reply message: %w", err)
+	}
+
+	return messageID, nil
+}
+
+func (db *appdbimpl) CreateImageMessage(conversationID, sender, imageURL string) (string, error) {
+	messageID := generateUUID()
+
+	_, err := db.c.Exec(`
+        INSERT INTO messages (id, conversation_id, sender, image_url, timestamp)
+        VALUES (?, ?, ?, ?, datetime('now'))
+    `, messageID, conversationID, sender, imageURL)
+
+	if err != nil {
+		return "", fmt.Errorf("error creating image message: %w", err)
+	}
+
+	return messageID, nil
 }

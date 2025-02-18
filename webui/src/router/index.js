@@ -21,6 +21,11 @@ const router = createRouter({
 			component: UserProfileView,
 			meta: { requiresAuth: true }
 		},
+		{
+			path: '/groups/:groupId?',
+			name: 'Groups',
+			component: () => import('../views/GroupView.vue')
+		},
 		//{path: '/some/:id/link', component: HomeView},
 	]
 })

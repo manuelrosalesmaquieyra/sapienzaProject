@@ -73,17 +73,13 @@ export const api = {
 
     // Add this function
     async createConversation(participantUsername) {
-        const requestBody = {
-            participants: [participantUsername]
-        };
-        console.log('Sending conversation request:', requestBody);
-        
-        const result = await apiCall('/conversations', {
+        console.log('Creating conversation with:', participantUsername);
+        return apiCall('/conversations', {
             method: 'POST',
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+                participants: [participantUsername]
+            })
         });
-        console.log('Create conversation response:', result);
-        return result;
     },
 
     getConversationDetails: async (conversationId) => {
@@ -101,9 +97,14 @@ export const api = {
     },
     
     forwardMessage: async (conversationId, messageId) => {
-        return await apiCall(`/conversations/${conversationId}/messages/${messageId}`, {
+        console.log('Forwarding message:', {
+            conversationId,
+            messageId,
+            url: `/conversations/${conversationId}/messages/${messageId}/forward`
+        });
+        return apiCall(`/conversations/${conversationId}/messages/${messageId}/forward`, {
             method: 'POST'
-        })
+        });
     },
 
     addReaction: async (messageId, emoji, conversationId) => {
@@ -150,6 +151,11 @@ export const api = {
 
         if (!response.ok) {
             const error = await response.text();
+            if (error.includes('same as current')) {
+                throw new Error('This is already your current username');
+            } else if (error.includes('already taken')) {
+                throw new Error('This username is already taken, please choose a different one');
+            }
             throw new Error(error || 'Failed to update username');
         }
 
@@ -208,13 +214,24 @@ export const api = {
     },
 
     // Update group photo
-    updateGroupPhoto: async (groupId, photoUrl) => {
-        return apiCall(`/groups/${groupId}/photo`, {
+    updateGroupPhoto: async (groupId, file) => {
+        const formData = new FormData()
+        formData.append('photo', file)
+        
+        const response = await fetch(`${API_URL}/groups/${groupId}/photo`, {
             method: 'POST',
-            body: JSON.stringify({
-                photo_url: photoUrl
-            })
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('sessionId')}`
+            },
+            body: formData
         })
+
+        if (!response.ok) {
+            const text = await response.text()
+            throw new Error(text)
+        }
+
+        return response.json()
     },
 
     // Leave group
@@ -222,5 +239,83 @@ export const api = {
         return apiCall(`/groups/${groupId}/leave`, {
             method: 'POST'
         })
-    }
+    },
+
+    // Add these methods to your api object
+    replyToMessage: async (conversationId, messageId, content) => {
+        return apiCall(`/conversations/${conversationId}/messages/${messageId}/reply`, {
+            method: 'POST',
+            body: JSON.stringify({ content })
+        });
+    },
+
+    sendImageMessage: async (conversationId, imageFile) => {
+        const formData = new FormData();
+        formData.append('image', imageFile);
+        
+        const response = await fetch(`${API_URL}/conversations/${conversationId}/image-message`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('sessionId')}`
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text);
+        }
+
+        return response.json();
+    },
+
+    // Add this new method to the api object
+    uploadProfilePhoto: async (username, file) => {
+        const formData = new FormData()
+        formData.append('photo', file)
+        
+        const response = await fetch(`${API_URL}/users/${username}/photo`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('sessionId')}`
+            },
+            body: formData
+        })
+
+        if (!response.ok) {
+            const text = await response.text()
+            throw new Error(text)
+        }
+
+        return response.json()
+    },
+
+    // Fix the checkUserExists method
+    async checkUserExists(username) {
+        try {
+            const response = await fetch(`${API_URL}/users/${username}/exists`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('sessionId')}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                return data.exists;
+            }
+            return false;
+        } catch (err) {
+            console.error('Error checking user:', err);
+            return false;
+        }
+    },
+
+    // Update the getAllUsers method
+    getAllUsers: async () => {
+        return apiCall('/allusers', {
+            method: 'GET'
+        })
+    },
 }

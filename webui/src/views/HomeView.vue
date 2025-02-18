@@ -21,26 +21,26 @@ const currentUsername = computed(() => localStorage.getItem('username'))
 
 // Fetch conversations
 const fetchData = async () => {
-    loading.value = true
-    error.value = ''
     try {
         const username = localStorage.getItem('username')
         if (!username) {
             throw new Error('Username not found')
         }
 
-        // Fetch both conversations and groups
+        // Keep existing data if fetch fails
         const conversationsData = await api.getConversations(username)
         
-        // Separate conversations and groups
-        conversations.value = conversationsData.filter(conv => !conv.is_group)
-        groups.value = conversationsData.filter(conv => conv.is_group)
+        if (conversationsData) {
+            // Only update lists if we got valid data
+            conversations.value = conversationsData.filter(conv => !conv.is_group)
+            groups.value = conversationsData.filter(conv => conv.is_group)
+        }
         
-        console.log('Chats:', conversations.value)
-        console.log('Groups:', groups.value)
+        error.value = '' // Clear any existing errors
     } catch (err) {
         error.value = 'Failed to load conversations and groups'
         console.error('Error:', err)
+        // Don't clear existing conversations/groups on error
     } finally {
         loading.value = false
     }
@@ -57,19 +57,60 @@ onMounted(() => {
 })
 
 const handleNewChat = async () => {
+    const targetUsername = newChatUsername.value.trim();
+    
     try {
-        console.log('Creating chat with:', newChatUsername.value)
-        const result = await api.createConversation(newChatUsername.value)
-        console.log('Chat created:', result)
-        showNewChatDialog.value = false
-        newChatUsername.value = ''
-        await fetchData()
+        if (!targetUsername) {
+            error.value = 'Please enter a username';
+            setTimeout(() => error.value = '', 2000); // Clear after 3 seconds
+            showNewChatDialog.value = false;
+            return;
+        }
+
+        if (targetUsername === currentUsername.value) {
+            error.value = 'Cannot create chat with yourself';
+            setTimeout(() => error.value = '', 2000); // Clear after 3 seconds
+            showNewChatDialog.value = false;
+            return;
+        }
+
+        const result = await api.createConversation(targetUsername);
+        
+        if (result) {
+            error.value = '';
+            await fetchData();
+        }
     } catch (err) {
-        console.error('Error creating chat:', err)
-        error.value = 'Failed to create conversation: ' + err.message
+        error.value = err.message;
+        setTimeout(() => error.value = '', 2000); // Clear after 3 seconds
+    } finally {
+        showNewChatDialog.value = false;
+        newChatUsername.value = '';
     }
 }
 
+// Add this new function after your ref declarations
+const validateUsers = async (usernames) => {
+    try {
+        const results = await Promise.all(
+            usernames.map(async username => {
+                const exists = await api.checkUserExists(username)
+                return { username, exists }
+            })
+        )
+        
+        const invalidUsers = results
+            .filter(result => !result.exists)
+            .map(result => result.username)
+            
+        return invalidUsers
+    } catch (err) {
+        console.error('Error validating users:', err)
+        throw err
+    }
+}
+
+// Modify the handleNewGroup function
 const handleNewGroup = async () => {
     try {
         // Convert comma-separated members string to array and trim whitespace
@@ -78,17 +119,32 @@ const handleNewGroup = async () => {
             .map(member => member.trim())
             .filter(member => member.length > 0)
 
-        // Validate
+        // Validate basic requirements
         if (newGroupName.value.length < 3 || newGroupName.value.length > 30) {
             error.value = 'Group name must be between 3 and 30 characters'
+            showNewGroupDialog.value = false // Close dialog
+            setTimeout(() => error.value = '', 2000) // Clear error after 2 seconds
             return
         }
         if (membersArray.length < 2) {
             error.value = 'Please add at least 2 members'
+            showNewGroupDialog.value = false
+            setTimeout(() => error.value = '', 2000)
             return
         }
         if (membersArray.length > 50) {
             error.value = 'Maximum 50 members allowed'
+            showNewGroupDialog.value = false
+            setTimeout(() => error.value = '', 2000)
+            return
+        }
+
+        // Validate users exist
+        const invalidUsers = await validateUsers(membersArray)
+        if (invalidUsers.length > 0) {
+            error.value = `Cannot create group: These users do not exist: ${invalidUsers.join(', ')}`
+            showNewGroupDialog.value = false
+            setTimeout(() => error.value = '', 2000)
             return
         }
 
@@ -106,6 +162,8 @@ const handleNewGroup = async () => {
     } catch (err) {
         console.error('Error creating group:', err)
         error.value = 'Failed to create group: ' + err.message
+        showNewGroupDialog.value = false // Close dialog on error
+        setTimeout(() => error.value = '', 2000) // Clear error after 2 seconds
     }
 }
 
@@ -144,7 +202,7 @@ const handleNewButton = () => {
         Loading...
       </div>
 
-      <div v-if="error" class="error-message">
+      <div v-if="error" class="error-banner">
         {{ error }}
       </div>
 
@@ -152,9 +210,6 @@ const handleNewButton = () => {
       <div class="conversations-list">
         <div v-if="loading" class="loading">
           Loading...
-        </div>
-        <div v-else-if="error" class="error-message">
-          {{ error }}
         </div>
         <div v-else>
           <!-- Show empty state based on active tab -->
@@ -193,7 +248,10 @@ const handleNewButton = () => {
                       ? item.participants.find(p => p !== currentUsername) 
                       : item.name }}
                 </h3>
-                <p>{{ item.last_message || 'No messages yet' }}</p>
+                <p>
+                  {{ item.last_message_is_reply ? '↩️ ' : '' }}
+                  {{ item.last_message || 'No messages yet' }}
+                </p>
               </div>
             </div>
           </div>
@@ -441,5 +499,24 @@ const handleNewButton = () => {
     font-size: 0.8rem;
     color: #666;
     margin-top: 0.25rem;
+}
+
+.error-banner {
+    position: fixed;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #f8d7da;
+    color: #721c24;
+    padding: 10px 20px;
+    border-radius: 4px;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: opacity 0.5s ease-in-out;
+    opacity: 1;
+}
+
+.error-banner.fade-out {
+    opacity: 0;
 }
 </style>

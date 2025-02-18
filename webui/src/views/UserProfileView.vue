@@ -41,19 +41,22 @@
             class="profile-photo"
           >
         </div>
-        <div class="input-group">
+        <div class="photo-actions">
           <input 
-            v-model="photoUrl" 
-            type="url" 
-            placeholder="Enter photo URL"
+            type="file"
+            ref="fileInput"
+            @change="handleFileSelect"
+            accept="image/*"
+            class="file-input"
+            style="display: none"
           >
-          <button @click="handlePhotoUpdate" :disabled="!isValidUrl">
-            Update Photo
+          <button @click="$refs.fileInput.click()" class="upload-btn">
+            Upload Photo
+          </button>
+          <button @click="handleRemovePhoto" class="remove-photo-btn">
+            Remove Photo
           </button>
         </div>
-        <button @click="handleRemovePhoto" class="remove-photo-btn">
-          Remove Photo
-        </button>
         <span v-if="photoError" class="error">{{ photoError }}</span>
       </div>
     </div>
@@ -134,28 +137,39 @@ const handleUsernameUpdate = async () => {
       usernameError.value = 'This username is already taken'
     } else if (err.message.includes('invalid')) {
       usernameError.value = 'Invalid username format'
+    } else if (err.message.includes('same as current')) {
+      usernameError.value = 'This is already your current username'
     } else {
-      usernameError.value = 'Failed to update username. Please try again.'
+      usernameError.value = err.message || 'Failed to update username. Please try again.'
     }
     console.error('Error updating username:', err)
   }
 }
 
-const handlePhotoUpdate = async () => {
-  if (!isValidUrl.value) {
-    photoError.value = 'Please enter a valid URL'
+const handleFileSelect = async (event) => {
+  const file = event.target.files[0]
+  if (!file) return
+
+  // Validate file type
+  if (!file.type.startsWith('image/')) {
+    photoError.value = 'Please select an image file'
+    return
+  }
+
+  // Validate file size (e.g., 5MB limit)
+  if (file.size > 5 * 1024 * 1024) {
+    photoError.value = 'Image size should be less than 5MB'
     return
   }
 
   try {
-    const response = await api.updateProfilePhoto(currentUsername.value, photoUrl.value)
-    currentPhotoUrl.value = response.photo_url
-    photoUrl.value = ''
     photoError.value = ''
+    const response = await api.uploadProfilePhoto(currentUsername.value, file)
+    currentPhotoUrl.value = response.photo_url
     await fetchUserData()
   } catch (err) {
-    photoError.value = 'Failed to update profile photo'
-    console.error('Error updating photo:', err)
+    photoError.value = 'Failed to upload profile photo'
+    console.error('Error uploading photo:', err)
   }
 }
 
@@ -300,5 +314,25 @@ button:disabled {
 .remove-photo-btn {
   background: #dc3545;  /* Red color for delete action */
   margin-top: 1rem;
+}
+
+.photo-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.upload-btn {
+  background: #0d6efd;
+  color: white;
+  padding: 0.8rem 1.2rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.upload-btn:hover {
+  background: #0b5ed7;
 }
 </style> 

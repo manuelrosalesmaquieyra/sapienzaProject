@@ -2,7 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -103,30 +109,71 @@ func (rt *_router) updateGroupPhoto(w http.ResponseWriter, r *http.Request, ps h
 		return
 	}
 
-	// Verificar autenticación
+	// Verify authentication
 	_, err := rt.getUserFromToken(r)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Parsear body
-	var requestBody struct {
-		PhotoURL string `json:"photo_url"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Actualizar foto
-	err = rt.db.UpdateGroupPhoto(groupID, requestBody.PhotoURL)
+	// Parse multipart form
+	err = r.ParseMultipartForm(10 << 20) // 10 MB max
 	if err != nil {
-		http.Error(w, "Failed to update group photo", http.StatusInternalServerError)
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	file, header, err := r.FormFile("photo")
+	if err != nil {
+		http.Error(w, "Failed to get file from form", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Validate file type
+	if !strings.HasPrefix(header.Header.Get("Content-Type"), "image/") {
+		http.Error(w, "File must be an image", http.StatusBadRequest)
+		return
+	}
+
+	// Generate unique filename
+	filename := fmt.Sprintf("group_%s_%d%s",
+		groupID,
+		time.Now().UnixNano(),
+		filepath.Ext(header.Filename))
+
+	// Save file to uploads/images directory
+	filepath := filepath.Join("uploads", "images", filename)
+	dst, err := os.Create(filepath)
+	if err != nil {
+		http.Error(w, "Failed to create file", http.StatusInternalServerError)
+		return
+	}
+	defer dst.Close()
+
+	_, err = io.Copy(dst, file)
+	if err != nil {
+		http.Error(w, "Failed to save file", http.StatusInternalServerError)
+		return
+	}
+
+	// Create the URL that points to your backend server
+	photoURL := fmt.Sprintf("http://localhost:3000/uploads/images/%s", filename)
+	if err := rt.db.UpdateGroupPhoto(groupID, photoURL); err != nil {
+		http.Error(w, "Failed to update photo in database", http.StatusInternalServerError)
+		return
+	}
+
+	// Return success response
+	response := struct {
+		PhotoURL string `json:"photo_url"`
+	}{
+		PhotoURL: photoURL,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }
 
 // leaveGroup maneja POST /groups/{group_id}/leave

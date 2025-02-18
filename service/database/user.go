@@ -55,6 +55,11 @@ func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
 		return fmt.Errorf("error getting old username: %w", err)
 	}
 
+	// Check if new username is the same as the current one
+	if oldUsername == newUsername {
+		return fmt.Errorf("new username is the same as current username")
+	}
+
 	// Check if new username already exists
 	var exists bool
 	err = tx.QueryRow(
@@ -67,7 +72,7 @@ func (db *appdbimpl) UpdateUsername(userID string, newUsername string) error {
 	}
 
 	if exists {
-		return errors.New("username already taken")
+		return fmt.Errorf("username '%s' is already taken, please choose a different one", newUsername)
 	}
 
 	// Update username in users table
@@ -134,4 +139,14 @@ func (db *appdbimpl) UpdateUserPhoto(userID string, photoURL string) error {
 	}
 
 	return err
+}
+
+// HasUser checks if a user exists in the database
+func (db *appdbimpl) HasUser(username string) bool {
+	var exists bool
+	err := db.c.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE username = ?)", username).Scan(&exists)
+	if err != nil {
+		return false
+	}
+	return exists
 }

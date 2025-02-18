@@ -75,6 +75,14 @@ type AppDatabase interface {
 	GetConversationParticipants(conversationId string) ([]string, error)
 
 	GetConversationDetails(conversationID string) (*ConversationDetails, error)
+
+	CreateImageMessage(conversationID, sender, imageURL string) (string, error)
+
+	CreateReplyMessage(conversationID, sender, content, replyToID string) (string, error)
+
+	HasUser(username string) bool
+
+	GetAllUsers() ([]string, error)
 }
 
 type appdbimpl struct {
@@ -108,6 +116,8 @@ func New(db *sql.DB) (AppDatabase, error) {
 		sender TEXT,
 		content TEXT,
 		timestamp DATETIME,
+		reply_to_id TEXT REFERENCES messages(id),
+		image_url TEXT,
 		FOREIGN KEY (conversation_id) REFERENCES conversations(id)
 	);
 
@@ -172,4 +182,27 @@ func New(db *sql.DB) (AppDatabase, error) {
 
 func (db *appdbimpl) Ping() error {
 	return db.c.Ping()
+}
+
+func (db *appdbimpl) GetAllUsers() ([]string, error) {
+	rows, err := db.c.Query(`
+		SELECT username 
+		FROM users 
+		ORDER BY username
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("error getting users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []string
+	for rows.Next() {
+		var username string
+		if err := rows.Scan(&username); err != nil {
+			return nil, fmt.Errorf("error scanning username: %w", err)
+		}
+		users = append(users, username)
+	}
+
+	return users, nil
 }

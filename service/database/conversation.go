@@ -33,26 +33,10 @@ func (db *appdbimpl) conversationExists(conversationID string) (bool, error) {
 
 // GetConversationMessages obtiene los mensajes de una conversación
 func (db *appdbimpl) GetConversationMessages(conversationID string) ([]Message, error) {
-	// Check if it's a regular conversation or a group
-	var exists bool
-	err := db.c.QueryRow(`
-        SELECT EXISTS(
-            SELECT 1 FROM conversations WHERE id = ?
-            UNION
-            SELECT 1 FROM groups WHERE id = ?
-        )
-    `, conversationID, conversationID).Scan(&exists)
-
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.New("conversation not found")
-	}
-
-	// Get messages with their reactions
 	rows, err := db.c.Query(`
-        SELECT m.id, m.conversation_id, m.sender, m.content, m.timestamp,
+        SELECT m.id, m.conversation_id, m.sender, 
+               m.content, m.image_url, m.reply_to_id, 
+               strftime('%Y-%m-%d %H:%M:%S', m.timestamp) as formatted_timestamp,
                r.user_id, r.reaction
         FROM messages m
         LEFT JOIN reactions r ON m.id = r.message_id
@@ -69,18 +53,39 @@ func (db *appdbimpl) GetConversationMessages(conversationID string) ([]Message, 
 	for rows.Next() {
 		var msg Message
 		var userID, reaction sql.NullString
+		var timestampStr string
 
 		err := rows.Scan(
 			&msg.ID,
 			&msg.ConversationID,
 			&msg.Sender,
 			&msg.Content,
-			&msg.Time,
+			&msg.ImageURL,
+			&msg.ReplyToID,
+			&timestampStr,
 			&userID,
 			&reaction,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning message: %w", err)
+		}
+
+		// Parse timestamp
+		timestamp, err := time.Parse("2006-01-02 15:04:05", timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing timestamp: %w", err)
+		}
+		msg.Time = timestamp
+
+		// Populate string fields for JSON
+		if msg.Content.Valid {
+			msg.ContentStr = msg.Content.String
+		}
+		if msg.ImageURL.Valid {
+			msg.ImageURLStr = fmt.Sprintf("http://localhost:3000%s", msg.ImageURL.String)
+		}
+		if msg.ReplyToID.Valid {
+			msg.ReplyToIDStr = msg.ReplyToID.String
 		}
 
 		// Get or create message in map
@@ -100,17 +105,13 @@ func (db *appdbimpl) GetConversationMessages(conversationID string) ([]Message, 
 		}
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
-	}
-
 	// Convert map to slice
 	messages := make([]Message, 0, len(messageMap))
 	for _, msg := range messageMap {
 		messages = append(messages, *msg)
 	}
 
-	// Sort by timestamp
+	// Sort messages by timestamp
 	sort.Slice(messages, func(i, j int) bool {
 		return messages[i].Time.Before(messages[j].Time)
 	})
@@ -157,10 +158,11 @@ func (db *appdbimpl) SendMessage(conversationID string, senderID string, content
 
 	// Crear mensaje
 	msg := Message{
-		ID:      generateUUID(),
-		Sender:  senderID,
-		Content: content,
-		Time:    time.Now(),
+		ID:         generateUUID(),
+		Sender:     senderID,
+		Content:    sql.NullString{String: content, Valid: true},
+		ContentStr: content,
+		Time:       time.Now(),
 	}
 
 	// Insertar mensaje
@@ -276,34 +278,46 @@ func (db *appdbimpl) CreateConversation(participants []string) (string, error) {
 func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, error) {
 	log.Printf("Getting conversations for user: %s", username)
 
-	// First get direct conversations
 	query := `
+        WITH LastMessages AS (
+            SELECT 
+                conversation_id,
+                content,
+                strftime('%Y-%m-%d %H:%M:%S', timestamp) as msg_timestamp,
+                reply_to_id,
+                ROW_NUMBER() OVER (PARTITION BY conversation_id ORDER BY timestamp DESC) as rn
+            FROM messages
+        )
         SELECT DISTINCT 
             c.id, 
-            COALESCE(c.last_message, ''), 
-            c.timestamp,
+            COALESCE(lm.content, '') as last_message,
+            strftime('%Y-%m-%d %H:%M:%S', COALESCE(lm.msg_timestamp, c.timestamp)) as conv_timestamp,
             FALSE as is_group,
             '' as group_name,
-            COALESCE(u2.photo_url, '') as photo_url
+            COALESCE(u2.photo_url, '') as photo_url,
+            CASE WHEN lm.reply_to_id IS NOT NULL THEN 1 ELSE 0 END as is_reply
         FROM conversations c
         JOIN conversation_participants cp ON c.id = cp.conversation_id
         JOIN users u ON cp.user_id = u.id
         JOIN conversation_participants cp2 ON c.id = cp2.conversation_id
         JOIN users u2 ON cp2.user_id = u2.id
+        LEFT JOIN LastMessages lm ON lm.conversation_id = c.id AND lm.rn = 1
         WHERE u.username = ? AND u2.username != ?
         UNION ALL
         SELECT 
             g.id,
-            '' as last_message,
-            g.timestamp,
+            COALESCE(lm.content, '') as last_message,
+            strftime('%Y-%m-%d %H:%M:%S', COALESCE(lm.msg_timestamp, g.timestamp)) as conv_timestamp,
             TRUE as is_group,
             g.name as group_name,
-            COALESCE(g.photo_url, '') as photo_url
+            COALESCE(g.photo_url, '') as photo_url,
+            CASE WHEN lm.reply_to_id IS NOT NULL THEN 1 ELSE 0 END as is_reply
         FROM groups g
         JOIN group_members gm ON g.id = gm.group_id
         JOIN users u ON gm.user_id = u.id
+        LEFT JOIN LastMessages lm ON lm.conversation_id = g.id AND lm.rn = 1
         WHERE u.username = ?
-        ORDER BY timestamp DESC`
+        ORDER BY conv_timestamp DESC`
 
 	rows, err := db.c.Query(query, username, username, username)
 	if err != nil {
@@ -317,30 +331,40 @@ func (db *appdbimpl) GetUserConversations(username string) ([]Conversation, erro
 		var isGroup bool
 		var groupName string
 		var photoURL string
+		var isReply int
+		var timestampStr string // Changed to string to handle timestamp
+
 		err := rows.Scan(
 			&conv.ID,
 			&conv.LastMessage,
-			&conv.Timestamp,
+			&timestampStr,
 			&isGroup,
 			&groupName,
 			&photoURL,
+			&isReply,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error scanning conversation: %w", err)
 		}
 
+		// Parse the timestamp string into time.Time
+		timestamp, err := time.Parse("2006-01-02 15:04:05", timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing timestamp: %w", err)
+		}
+		conv.Timestamp = timestamp
+
 		conv.IsGroup = isGroup
 		conv.PhotoURL = photoURL
+		conv.LastMessageIsReply = isReply == 1
 		if isGroup {
 			conv.Name = groupName
-			// Get group members
 			members, err := db.getGroupMembers(conv.ID)
 			if err != nil {
 				return nil, fmt.Errorf("error getting group members: %w", err)
 			}
 			conv.Participants = members
 		} else {
-			// Get participants for direct conversations
 			participants, err := db.GetConversationParticipants(conv.ID)
 			if err != nil {
 				return nil, fmt.Errorf("error getting participants: %w", err)
